@@ -225,21 +225,23 @@
     order: 2;
     width: 100%;
     justify-content: space-between;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
-  .segmented {
-    gap: 5px;
-  }
-
+  /* the option text says it all — drop the tiny labels to fit 375px */
   .segmented-label {
-    font-size: 8.5px;
-    letter-spacing: 0.14em;
+    display: none;
   }
 
   .segmented-opt {
-    padding: 3px 7px 4px;
-    font-size: 10px;
+    padding: 3px 6px 4px;
+    font-size: 9.5px;
+  }
+
+  .sound-toggle {
+    font-size: 13px;
+    padding: 2px 7px 3px;
   }
 
   .overlay-card {

@@ -65,6 +65,16 @@ button {
   cursor: pointer;
 }
 
+/* phones: hard-lock the page so nothing can pan it sideways */
+@media (max-width: 700px) {
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    overscroll-behavior: none;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }

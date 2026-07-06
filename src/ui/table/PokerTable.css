@@ -530,6 +530,8 @@
 @media (max-width: 700px) {
   .table-zone {
     padding: 26px 6px 6px;
+    /* clip seat-pod overhang so it can never create horizontal scroll */
+    overflow: hidden;
   }
 
   /* a wide oval can't fit a portrait phone — stand it upright */
@@ -561,13 +563,14 @@
     inset: 10%;
   }
 
-  /* seats around the tall ellipse, hero at the bottom */
+  /* seats around the tall ellipse, hero at the bottom — side seats sit
+     further in than on desktop so pods stay fully on-screen */
   .seat--pos0 { left: 50%; top: 96%; }
-  .seat--pos1 { left: 15%; top: 76%; }
-  .seat--pos2 { left: 13%; top: 27%; }
+  .seat--pos1 { left: 20%; top: 77%; }
+  .seat--pos2 { left: 19%; top: 27%; }
   .seat--pos3 { left: 50%; top: 3%; }
-  .seat--pos4 { left: 87%; top: 27%; }
-  .seat--pos5 { left: 85%; top: 76%; }
+  .seat--pos4 { left: 81%; top: 27%; }
+  .seat--pos5 { left: 80%; top: 77%; }
 
   .bet-spot--pos0 { left: 50%; top: 76%; }
   .bet-spot--pos1 { left: 30%; top: 66%; }
@@ -590,7 +593,7 @@
 
   .seat-name {
     font-size: 10.5px;
-    max-width: 92px;
+    max-width: 76px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
