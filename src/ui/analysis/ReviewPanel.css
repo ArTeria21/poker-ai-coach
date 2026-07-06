@@ -144,3 +144,25 @@
 .review-coach b {
   color: var(--cream);
 }
+
+@media (max-width: 700px) {
+  .review-panel {
+    margin: 0 8px 6px;
+    padding: 7px 10px 9px;
+    max-height: 190px;
+  }
+
+  .review-row-line {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .review-street {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .review-action {
+    font-size: 12px;
+  }
+}
