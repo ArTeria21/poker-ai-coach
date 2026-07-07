@@ -90,6 +90,12 @@ export interface GameState {
   lastRaiseAmount: number;
   /** Seat index to act, or null (between streets / hand complete). */
   actionOn: number | null;
+  /**
+   * Last player to bet or raise this hand (blinds don't count). Public
+   * information — everyone at the table saw it. Drives bot initiative
+   * (continuation bets) without leaking anything private.
+   */
+  lastAggressor: number | null;
   /** Ordered actions applied so far — replaying these on {config, seed} rebuilds any state. */
   actionHistory: PlayerAction[];
 }

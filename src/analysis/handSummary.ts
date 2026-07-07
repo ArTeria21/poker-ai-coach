@@ -28,6 +28,8 @@ export interface HandSummary {
   heroIsRoyal: boolean;
   /** True when everyone folded and no cards were shown. */
   wonWithoutShowdown: boolean;
+  /** True when the winner voluntarily flipped over a successful bluff. */
+  bluffShown?: boolean;
   /** Main-pot winners. */
   winners: SummaryWinner[];
 }

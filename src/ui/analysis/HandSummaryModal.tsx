@@ -60,6 +60,12 @@ export function HandSummaryModal() {
               Everyone folded, so no cards were shown — pots can be won without ever having a hand.
             </p>
           )}
+          {summary.bluffShown && (
+            <p className="summary-note">
+              Nobody called — and the winner flipped over a <b>stone-cold bluff</b>. Every fold you
+              make teaches the table something. Fold too often, and this is how they use it.
+            </p>
+          )}
           {summary.heroFolded && heroRow != null && (
             <p className="summary-note">
               You folded — but with the final board your cards would have made <b>{summary.heroDescription}</b>.

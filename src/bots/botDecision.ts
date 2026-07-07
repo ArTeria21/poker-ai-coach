@@ -26,6 +26,8 @@ export interface BotView {
   bigBlind: number;
   legal: LegalActions;
   numActive: number;
+  /** True when this seat made the last bet/raise of the hand (initiative). */
+  iAmLastAggressor?: boolean;
 }
 
 export interface BotDecision {
@@ -56,6 +58,7 @@ export function buildBotView(state: GameState, seatIndex: number): BotView {
     bigBlind: state.config.bigBlind,
     legal: la,
     numActive: state.players.filter((q) => !q.folded).length,
+    iAmLastAggressor: state.lastAggressor === seatIndex,
   };
 }
 
@@ -156,14 +159,34 @@ function decidePostflop(
     `${info.description} (strength ${info.strength.toFixed(2)}${info.flushDraw ? ' +FD' : ''}${info.straightDraw ? ` +${info.straightDraw}` : ''}, read ${s.toFixed(2)})`,
   );
 
+  // Bluffing context: bluff heads-up far more than multi-way, and taper
+  // across streets so bots fire the flop more than they triple-barrel.
+  const opponents = Math.max(1, view.numActive - 1);
+  const crowd = opponents === 1 ? 1 : opponents === 2 ? 0.5 : 0.25;
+  const taper = view.phase === 'flop' ? 1 : view.phase === 'turn' ? 0.6 : 0.35;
+  const hasStrongDraw = view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd');
+
   if (view.toCall === 0) {
     if (s > 0.55 && rng() < Math.min(0.95, 0.7 * p.aggressionFactor)) {
       trace.push('value betting ~60% pot');
       return raiseTo(view.myStreetBet + Math.round(0.6 * view.pot));
     }
-    if (s < 0.3 && view.board.length >= 3 && rng() < p.bluffFrequency) {
+    if (hasStrongDraw && rng() < Math.min(0.85, 0.45 * p.aggressionFactor)) {
+      trace.push('semi-bluffing the draw: they fold now, or I hit later');
+      return raiseTo(view.myStreetBet + Math.round(0.6 * view.pot));
+    }
+    if (
+      view.iAmLastAggressor &&
+      opponents <= 2 &&
+      s >= 0.28 &&
+      rng() < 0.4 * p.aggressionFactor * (view.phase === 'flop' ? 1 : 0.45)
+    ) {
+      trace.push('continuation bet: told a strong story preflop, sticking to it');
+      return raiseTo(view.myStreetBet + Math.round(0.5 * view.pot));
+    }
+    if (s < 0.33 && view.board.length >= 3 && rng() < Math.min(0.75, p.bluffFrequency * 2 * taper * crowd)) {
       trace.push('bluffing at it');
-      return raiseTo(view.myStreetBet + Math.round(0.55 * view.pot));
+      return raiseTo(view.myStreetBet + Math.round(0.6 * view.pot));
     }
     trace.push('checking');
     return { type: 'check' };
@@ -177,11 +200,15 @@ function decidePostflop(
     trace.push('raising for value');
     return raiseTo(Math.round(view.currentBet * 2.5));
   }
+  if (hasStrongDraw && view.legal.raise && rng() < Math.min(0.5, p.bluffFrequency + 0.1) * crowd) {
+    trace.push('semi-bluff raising the draw');
+    return raiseTo(Math.round(view.currentBet * 2.5));
+  }
   if (s >= effRequired) {
     trace.push('calling: strength beats the price');
     return { type: 'call' };
   }
-  if (view.legal.raise && rng() < p.bluffFrequency * 0.15) {
+  if (view.legal.raise && rng() < p.bluffFrequency * 0.3 * crowd) {
     trace.push('bluff-raising');
     return raiseTo(Math.round(view.currentBet * 2.5));
   }

@@ -7,6 +7,7 @@ import { legalActions } from '../engine/bettingRules';
 import { mulberry32, randomSeed, type Rng } from '../engine/rng';
 import { PERSONALITIES, type Personality } from '../bots/personalities';
 import { buildBotView, decideAction } from '../bots/botDecision';
+import { bluffRevealCheck } from './bluffReveal';
 import { postflopAdvice, preflopAdvice } from '../coach/recommend';
 import { getEquity } from '../equity/equityClient';
 import { gradeHand } from '../analysis/gradeHand';
@@ -243,12 +244,12 @@ class TableController {
     const heroNet = this.state.players[heroSeat].stack - this.state.players[heroSeat].startingStack;
     const heroSatOut =
       this.state.players[heroSeat].folded && this.state.players[heroSeat].totalCommitted === 0;
-    this.lastSummary = summarizeHand(
-      this.state,
-      this.reveals.size > 0,
-      this.mainPotWinners,
-      this.winners,
-    );
+    const bluffShown = this.maybeRevealBluff();
+    if (bluffShown) this.publishSnapshot({ heroLegal: null }); // show the flipped cards
+    this.lastSummary = {
+      ...summarizeHand(this.state, this.reveals.size > 0, this.mainPotWinners, this.winners),
+      bluffShown,
+    };
     try {
       const grade = gradeHand(record, heroSeat);
       // don't nag about hands where the hero just folded pre for free
@@ -322,14 +323,20 @@ class TableController {
     if (now - this.lastQuipAt < 6000) return;
     if (now - (this.lastQuipBySeat.get(seatIndex) ?? 0) < 18_000) return;
     if (this.botRng() > probability) return;
+    this.emitQuip(seatIndex, kind);
+  }
+
+  /** Publishes a quip bubble unconditionally (cooldowns handled by callers). */
+  private emitQuip(seatIndex: number, kind: keyof Personality['quips']): void {
+    const player = this.players[seatIndex];
+    if (!player?.personalityId) return;
     const lines = PERSONALITIES[player.personalityId].quips[kind];
     if (lines.length === 0) return;
     const text = lines[Math.floor(this.botRng() * lines.length)];
-    this.lastQuipAt = now;
-    this.lastQuipBySeat.set(seatIndex, now);
+    this.lastQuipAt = Date.now();
+    this.lastQuipBySeat.set(seatIndex, this.lastQuipAt);
     const id = ++this.quipId;
-    const store = useGameStore.getState();
-    store.publish({ quips: { ...useGameStore.getState().quips, [seatIndex]: { text, id } } });
+    useGameStore.getState().publish({ quips: { ...useGameStore.getState().quips, [seatIndex]: { text, id } } });
     setTimeout(() => {
       const current = useGameStore.getState().quips;
       if (current[seatIndex]?.id !== id) return;
@@ -337,6 +344,33 @@ class TableController {
       delete next[seatIndex];
       useGameStore.getState().publish({ quips: next });
     }, 4500);
+  }
+
+  /**
+   * After winning without a showdown, a bot sometimes flips over a weak hand
+   * to show the bluff — how often depends on personality. This is what makes
+   * bluffing visible (and painful) enough to learn from.
+   */
+  private maybeRevealBluff(): boolean {
+    const st = this.state;
+    if (!st || this.reveals.size > 0 || this.mainPotWinners.length !== 1) return false;
+    const seat = this.mainPotWinners[0];
+    const player = this.players[seat];
+    if (!player?.personalityId) return false; // the hero shows his own bluffs
+    const ps = st.players[seat];
+    const desc = bluffRevealCheck(
+      PERSONALITIES[player.personalityId],
+      ps.holeCards,
+      st.board,
+      this.botRng,
+    );
+    if (!desc) return false;
+    this.reveals.set(seat, `${desc} — a stone-cold bluff`);
+    useGameStore
+      .getState()
+      .appendLog([`${player.name} shows the bluff: ${formatCards(ps.holeCards)} — just ${desc}!`]);
+    this.emitQuip(seat, 'showBluff');
+    return true;
   }
 
   private consumeEvents(events: HandEvent[]): void {

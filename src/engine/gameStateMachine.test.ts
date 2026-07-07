@@ -270,6 +270,22 @@ describe('showdown and side pots (rigged decks)', () => {
   });
 });
 
+describe('lastAggressor tracking', () => {
+  it('records the last bettor/raiser and carries initiative across streets', () => {
+    let { state } = startHand(config([1000, 1000, 1000]), 42);
+    expect(state.lastAggressor).toBeNull(); // blinds don't count
+    state = act(state, 'raise', 30); // button opens
+    expect(state.lastAggressor).toBe(0);
+    state = act(state, 'call');
+    state = act(state, 'call');
+    expect(state.phase).toBe('flop');
+    expect(state.lastAggressor).toBe(0); // preflop raiser keeps initiative
+    state = act(state, 'check'); // SB
+    state = act(state, 'raise', 25); // BB bets the flop
+    expect(state.lastAggressor).toBe(2);
+  });
+});
+
 describe('event log', () => {
   it('emits a coherent sequence for a simple hand', () => {
     const { state, events } = startHand(config([1000, 1000, 1000]), 42);

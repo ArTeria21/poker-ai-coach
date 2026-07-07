@@ -88,6 +88,7 @@ export function startHandWithDeck(
     currentBet: config.bigBlind,
     lastRaiseAmount: config.bigBlind,
     actionOn: null,
+    lastAggressor: null,
     actionHistory: [],
   };
 
@@ -168,6 +169,7 @@ export function applyAction(prev: GameState, action: PlayerAction): EngineResult
       const increment = target - state.currentBet;
       const added = commit(p, target - p.streetBet);
       state.currentBet = target;
+      state.lastAggressor = p.seatIndex;
       if (increment >= state.lastRaiseAmount) {
         // Full raise: action re-opens for everyone still in.
         state.lastRaiseAmount = increment;

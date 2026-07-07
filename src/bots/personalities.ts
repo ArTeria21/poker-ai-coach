@@ -23,6 +23,8 @@ export interface Personality {
   callStationFactor: number;
   /** 0..1 — how much facing a raise scares them off marginal hands. */
   foldToAggression: number;
+  /** Chance to flip over a successful bluff after winning without showdown. */
+  showBluffChance: number;
   /** Table talk, fired occasionally by the controller. */
   quips: {
     win: string[];
@@ -30,6 +32,7 @@ export interface Personality {
     allIn: string[];
     raise: string[];
     fold: string[];
+    showBluff: string[];
   };
 }
 
@@ -45,12 +48,14 @@ export const PERSONALITIES: Record<string, Personality> = {
     bluffFrequency: 0.15,
     callStationFactor: 0.05,
     foldToAggression: 0.5,
+    showBluffChance: 0.12,
     quips: {
       win: ['Thank you kindly.', 'Position is profit.', 'That’s how the math works out.'],
       bigWin: ['And THAT is why you charge the draws.', 'Textbook. Frame it.'],
       allIn: ['All the chips. Your decision.', 'Time to define your hand.'],
       raise: ['Let’s raise the stakes.', 'Pressure applied.'],
       fold: ['Not my spot.', 'You can have this one.'],
+      showBluff: ['You’d have called with the right price.', 'Information is expensive. That one was free.'],
     },
   },
   rock: {
@@ -64,12 +69,14 @@ export const PERSONALITIES: Record<string, Personality> = {
     bluffFrequency: 0.02,
     callStationFactor: 0,
     foldToAggression: 0.8,
+    showBluffChance: 0.03,
     quips: {
       win: ['Yep.', 'Told you.'],
       bigWin: ['Patience pays.', 'Been waiting two hours for that.'],
       allIn: ['I don’t do this often.', 'You should worry now.'],
       raise: ['I have it. Fold.', 'Careful.'],
       fold: ['Nope.', 'Junk.', 'Next.'],
+      showBluff: ['...felt like it.', 'Even a rock rolls once a year.'],
     },
   },
   maniac: {
@@ -83,12 +90,14 @@ export const PERSONALITIES: Record<string, Personality> = {
     bluffFrequency: 0.35,
     callStationFactor: 0.15,
     foldToAggression: 0.15,
+    showBluffChance: 0.55,
     quips: {
       win: ['HA! Ship it!', 'Too easy. TOO easy.', 'Read you like a menu.'],
       bigWin: ['STACK ME UP BABY!', 'Who else wants some?!'],
       allIn: ['ALL IN. Let’s gamble!', 'Boom. Everything. Right now.'],
       raise: ['Raise! Obviously.', 'More chips in the middle!', 'Wake up, table!'],
       fold: ['Ugh, FINE.', 'Boring hand anyway.'],
+      showBluff: ['SEVEN HIGH! Read it and weep!', 'I had NOTHING. Beautiful, right?', 'You folded to AIR, friends!'],
     },
   },
   fish: {
@@ -102,12 +111,14 @@ export const PERSONALITIES: Record<string, Personality> = {
     bluffFrequency: 0.05,
     callStationFactor: 0.6,
     foldToAggression: 0.3,
+    showBluffChance: 0.1,
     quips: {
       win: ['Ooh! Mine? Mine!', 'I KNEW the river would save me!', 'Lucky fins!'],
       bigWin: ['BIG bubbles! Big big bubbles!', 'See? Any two cards!'],
       allIn: ['Whee, all of them!', 'In for a splash!'],
       raise: ['Feeling splashy!', 'Why not!'],
       fold: ['Aww. Okay.', 'Fine, but I liked those.'],
+      showBluff: ['Hee hee — bubbles and air!', 'I had nothing! Did I do it right?'],
     },
   },
   nit: {
@@ -121,12 +132,14 @@ export const PERSONALITIES: Record<string, Personality> = {
     bluffFrequency: 0.01,
     callStationFactor: 0,
     foldToAggression: 0.9,
+    showBluffChance: 0.02,
     quips: {
       win: ['Finally.', 'About time.'],
       bigWin: ['Five years of folding, for this exact moment.', 'Worth the wait.'],
       allIn: ['I have aces. I’m telling you. Aces.', 'This never happens.'],
       raise: ['This is not a bluff.', 'You’ve been warned.'],
       fold: ['Obviously.', 'As always.', '*sigh*'],
+      showBluff: ['I apologize. That was out of character.', 'Please don’t tell anyone.'],
     },
   },
 };
