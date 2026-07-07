@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
+import { useUiStore } from '../../store/uiStore';
 import { tableController } from '../../game/tableController';
 import { formatChips } from '../../game/format';
 import './ActionBar.css';
@@ -9,6 +10,8 @@ export function ActionBar() {
   const pot = useGameStore((s) => s.pot);
   const seats = useGameStore((s) => s.seats);
   const status = useGameStore((s) => s.status);
+  const awaitingNext = useGameStore((s) => s.awaitingNext);
+  const setSummaryOpen = useUiStore((s) => s.setSummaryOpen);
 
   const currentBet = useMemo(
     () => seats.reduce((max, seat) => Math.max(max, seat.streetBet), 0),
@@ -23,6 +26,20 @@ export function ActionBar() {
   }, [raise]);
 
   if (!heroLegal) {
+    if (awaitingNext) {
+      return (
+        <div className="action-bar">
+          <div className="action-buttons action-buttons--between">
+            <button className="btn btn--neutral" onClick={() => setSummaryOpen(true)}>
+              Hand summary
+            </button>
+            <button className="btn btn--raise" onClick={() => tableController.continueNextHand()}>
+              Deal next hand →
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="action-bar action-bar--waiting">
         <span className="waiting-text">

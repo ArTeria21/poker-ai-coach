@@ -10,6 +10,7 @@ import { buildBotView, decideAction } from '../bots/botDecision';
 import { postflopAdvice, preflopAdvice } from '../coach/recommend';
 import { getEquity } from '../equity/equityClient';
 import { gradeHand } from '../analysis/gradeHand';
+import { summarizeHand, type HandSummary } from '../analysis/handSummary';
 import { saveHand, type StoredHand } from '../stats/db';
 import { sounds } from './sounds';
 import { pushHandToServer } from './sync';
@@ -50,8 +51,10 @@ class TableController {
   private banner: string | null = null;
   /** Whether someone already bet this street (blinds count preflop). */
   private streetHasBet = true;
-  /** Last hand's review contained mistakes → run loop lingers on it. */
-  private lastReviewFlagged = false;
+  private pendingNext: (() => void) | null = null;
+  private lastSummary: HandSummary | null = null;
+  /** Main-pot winners of the current hand (drives the summary chart marker). */
+  private mainPotWinners: number[] = [];
   private quipId = 0;
   private lastQuipAt = 0;
   private lastQuipBySeat = new Map<number, number>();
@@ -86,6 +89,14 @@ class TableController {
     this.sessionToken++;
     this.pendingHuman = null;
     this.pendingRebuy = null;
+    this.pendingNext = null;
+  }
+
+  /** Called by the "deal next hand" button — the game waits for this. */
+  continueNextHand(): void {
+    const resume = this.pendingNext;
+    this.pendingNext = null;
+    resume?.();
   }
 
   /** Called by the action bar. Ignores clicks that aren't currently legal. */
@@ -123,9 +134,16 @@ class TableController {
     while (token === this.sessionToken) {
       await this.playHand(token);
       if (token !== this.sessionToken) return;
-      // linger longer when the review flagged something worth reading
-      await this.delay(this.lastReviewFlagged ? 9000 : 2600);
+      // let the winner banner land, then pause for study until the player
+      // asks for the next hand
+      await this.delay(1500);
       if (token !== this.sessionToken) return;
+      useGameStore.getState().publish({ summary: this.lastSummary, awaitingNext: true });
+      await new Promise<void>((res) => {
+        this.pendingNext = res;
+      });
+      if (token !== this.sessionToken) return;
+      useGameStore.getState().publish({ summary: null, awaitingNext: false });
 
       for (const p of this.players) {
         if (!p.isHero && p.stack === 0) {
@@ -150,6 +168,7 @@ class TableController {
     this.lastActions.clear();
     this.reveals.clear();
     this.winners.clear();
+    this.mainPotWinners = [];
     this.banner = null;
     this.streetHasBet = true; // blinds are live bets preflop
 
@@ -224,12 +243,16 @@ class TableController {
     const heroNet = this.state.players[heroSeat].stack - this.state.players[heroSeat].startingStack;
     const heroSatOut =
       this.state.players[heroSeat].folded && this.state.players[heroSeat].totalCommitted === 0;
-    this.lastReviewFlagged = false;
+    this.lastSummary = summarizeHand(
+      this.state,
+      this.reveals.size > 0,
+      this.mainPotWinners,
+      this.winners,
+    );
     try {
       const grade = gradeHand(record, heroSeat);
-      this.lastReviewFlagged = grade.mistakes + grade.blunders > 0;
       // don't nag about hands where the hero just folded pre for free
-      if (!heroSatOut || this.lastReviewFlagged) {
+      if (!heroSatOut || grade.mistakes + grade.blunders > 0) {
         useGameStore.getState().publish({ review: grade });
       }
       const stored: StoredHand = {
@@ -375,6 +398,7 @@ class TableController {
           lines.push(`Uncalled bet (${e.amount}) returned to ${name(e.seatIndex)}`);
           break;
         case 'potAwarded': {
+          if (e.potIndex === 0) this.mainPotWinners = e.winners.map((w) => w.seatIndex);
           for (const w of e.winners) {
             this.winners.set(w.seatIndex, (this.winners.get(w.seatIndex) ?? 0) + w.amount);
             const withHand = w.description ? ` with ${w.description}` : '';

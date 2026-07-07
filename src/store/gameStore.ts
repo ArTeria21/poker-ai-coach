@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { ActionType, Card, GamePhase, LegalActions } from '../engine/types';
 import type { CoachAdvice } from '../coach/recommend';
 import type { HandGrade } from '../analysis/gradeHand';
+import type { HandSummary } from '../analysis/handSummary';
 
 /**
  * UI-facing snapshot of the table. SANITIZED: bot hole cards are null until
@@ -48,6 +49,10 @@ export interface GameViewState {
   coach: CoachAdvice | null;
   /** Post-hand review of the hero's decisions (null until graded). */
   review: HandGrade | null;
+  /** End-of-hand study screen data. */
+  summary: HandSummary | null;
+  /** True while the game is paused waiting for "deal next hand". */
+  awaitingNext: boolean;
   /** One-liner banner at hand end, e.g. "Selena wins 300 with a flush". */
   banner: string | null;
   /** Rolling human-readable action log (most recent last). */
@@ -67,6 +72,8 @@ const initialState: GameViewState = {
   heroLegal: null,
   coach: null,
   review: null,
+  summary: null,
+  awaitingNext: false,
   banner: null,
   log: [],
   quips: {},

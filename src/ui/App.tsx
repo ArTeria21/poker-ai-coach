@@ -11,6 +11,7 @@ import { ReviewPanel } from './analysis/ReviewPanel';
 import { LessonsView } from './lessons/LessonsView';
 import { StatsView } from './stats/StatsView';
 import { ReplayViewer } from './analysis/ReplayViewer';
+import { HandSummaryModal } from './analysis/HandSummaryModal';
 import { useUiStore, type AppView } from '../store/uiStore';
 import './App.css';
 
@@ -33,6 +34,7 @@ export function App() {
       </div>
       {view === 'lessons' && <LessonsView />}
       {view === 'stats' && <StatsView />}
+      <HandSummaryModal />
       <ReplayViewer />
       {status === 'idle' && view === 'play' && <WelcomeOverlay />}
       {status === 'heroBusted' && view === 'play' && <BustedOverlay />}

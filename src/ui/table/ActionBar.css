@@ -43,6 +43,16 @@
   transform: translateY(0);
 }
 
+.action-buttons--between {
+  width: min(560px, 100%);
+  justify-content: space-between;
+}
+
+.btn--neutral {
+  background: linear-gradient(170deg, #232b22, #151a15);
+  border-color: rgba(233, 200, 128, 0.25);
+}
+
 .btn--fold {
   background: linear-gradient(170deg, #6d3527, #4a2118);
   border-color: rgba(212, 89, 62, 0.35);
