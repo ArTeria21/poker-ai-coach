@@ -11,7 +11,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "idb": "^8.0.3",
     "phe": "^0.6.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

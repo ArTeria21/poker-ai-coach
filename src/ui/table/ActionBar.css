@@ -45,12 +45,7 @@
 
 .action-buttons--between {
   width: min(560px, 100%);
-  justify-content: space-between;
-}
-
-.btn--neutral {
-  background: linear-gradient(170deg, #232b22, #151a15);
-  border-color: rgba(233, 200, 128, 0.25);
+  justify-content: center;
 }
 
 .btn--fold {

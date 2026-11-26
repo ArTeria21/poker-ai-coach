@@ -1,4 +1,5 @@
 import type { Card, GameState, PlayerAction, PlayerState, TableConfig } from './types';
+import { firstToReceive } from './types';
 import type { HandEvent } from './events';
 import { shuffledDeck } from './deck';
 import { legalActions } from './bettingRules';
@@ -33,7 +34,9 @@ export function startHandWithDeck(
   handId?: string,
 ): EngineResult {
   const n = config.seats.length;
+  const ante = config.bigBlindAnte ?? 0;
   if (n < 2 || n > 6) throw new EngineError(`Need 2-6 players, got ${n}`);
+  if (!Number.isInteger(ante) || ante < 0) throw new EngineError(`Invalid ante ${ante}`);
   if (
     !Number.isInteger(config.smallBlind) ||
     !Number.isInteger(config.bigBlind) ||
@@ -42,9 +45,26 @@ export function startHandWithDeck(
   ) {
     throw new EngineError(`Invalid blinds ${config.smallBlind}/${config.bigBlind}`);
   }
-  if (config.buttonIndex < 0 || config.buttonIndex >= n) {
+  const isSeat = (i: number | null | undefined): i is number => i != null && Number.isInteger(i) && i >= 0 && i < n;
+  if (config.buttonIndex !== null && !isSeat(config.buttonIndex)) {
     throw new EngineError(`Invalid buttonIndex ${config.buttonIndex}`);
   }
+  const sbSeat = config.smallBlindIndex === undefined
+    ? config.buttonIndex === null ? null : n === 2 ? config.buttonIndex : (config.buttonIndex + 1) % n
+    : config.smallBlindIndex;
+  const bbSeat = config.bigBlindIndex ?? (sbSeat === null ? undefined : (sbSeat + 1) % n);
+  if (
+    !isSeat(bbSeat) || (sbSeat !== null && !isSeat(sbSeat)) ||
+    (config.buttonIndex === null && (config.smallBlindIndex === undefined || config.bigBlindIndex === undefined)) ||
+    (sbSeat !== null && bbSeat !== (sbSeat + 1) % n) ||
+    n + Number(config.buttonIndex === null) + Number(sbSeat === null) > 6 ||
+    (n === 2 && (config.buttonIndex === null || sbSeat !== config.buttonIndex)) ||
+    (n > 2 && config.buttonIndex !== null && (
+      config.buttonIndex === sbSeat || config.buttonIndex === bbSeat ||
+      (config.buttonIndex + 1) % n !== (sbSeat ?? bbSeat)
+    ))
+  ) throw new EngineError('Invalid blind positions');
+  const first = firstToReceive(n, sbSeat, bbSeat);
   for (const s of config.seats) {
     if (!Number.isInteger(s.stack) || s.stack <= 0) {
       throw new EngineError(`Invalid stack ${s.stack} for ${s.name}`);
@@ -55,8 +75,8 @@ export function startHandWithDeck(
   let deckIndex = 0;
   const dealt: Card[][] = config.seats.map(() => []);
   for (let round = 0; round < 2; round++) {
-    for (let i = 1; i <= n; i++) {
-      dealt[(config.buttonIndex + i) % n].push(deck[deckIndex++]);
+    for (let i = 0; i < n; i++) {
+      dealt[(first + i) % n].push(deck[deckIndex++]);
     }
   }
 
@@ -83,8 +103,11 @@ export function startHandWithDeck(
     deckIndex,
     players,
     buttonIndex: config.buttonIndex,
+    smallBlindIndex: sbSeat,
+    bigBlindIndex: bbSeat,
     phase: 'preflop',
     board: [],
+    antePot: 0,
     currentBet: config.bigBlind,
     lastRaiseAmount: config.bigBlind,
     actionOn: null,
@@ -97,6 +120,8 @@ export function startHandWithDeck(
       type: 'handStarted',
       handId: state.handId,
       buttonIndex: state.buttonIndex,
+      smallBlindIndex: sbSeat,
+      bigBlindIndex: bbSeat,
       smallBlind: config.smallBlind,
       bigBlind: config.bigBlind,
       players: players.map((p) => ({ seatIndex: p.seatIndex, id: p.id, name: p.name, stack: p.startingStack })),
@@ -107,13 +132,19 @@ export function startHandWithDeck(
     },
   ];
 
-  // Heads-up: the button is the small blind.
-  const sbSeat = n === 2 ? state.buttonIndex : (state.buttonIndex + 1) % n;
-  const bbSeat = (sbSeat + 1) % n;
-  const sbPaid = commit(players[sbSeat], config.smallBlind);
-  events.push({ type: 'blindPosted', seatIndex: sbSeat, kind: 'small', amount: sbPaid, allIn: players[sbSeat].allIn });
+  if (sbSeat !== null) {
+    const sbPaid = commit(players[sbSeat], config.smallBlind);
+    events.push({ type: 'blindPosted', seatIndex: sbSeat, kind: 'small', amount: sbPaid, allIn: players[sbSeat].allIn });
+  }
   const bbPaid = commit(players[bbSeat], config.bigBlind);
   events.push({ type: 'blindPosted', seatIndex: bbSeat, kind: 'big', amount: bbPaid, allIn: players[bbSeat].allIn });
+  if (ante > 0) {
+    const bb = players[bbSeat];
+    state.antePot = Math.min(ante, bb.stack);
+    bb.stack -= state.antePot;
+    bb.allIn = bb.stack === 0;
+    events.push({ type: 'antePosted', seatIndex: bbSeat, amount: state.antePot, allIn: bb.allIn });
+  }
 
   state.actionOn = findNextActor(state, bbSeat);
   if (state.actionOn === null) closeStreetLoop(state, events);
@@ -177,7 +208,7 @@ export function applyAction(prev: GameState, action: PlayerAction): EngineResult
           if (q !== p && !q.folded && !q.allIn) q.hasActed = false;
         }
       }
-      // Short all-in raise: no reset — players who acted keep no raise rights.
+      // Short all-ins don't reset hasActed; legalActions checks cumulative reopening.
       p.hasActed = true;
       events.push(actionEvent(p, 'raise', added));
       break;
@@ -226,8 +257,15 @@ function commit(p: PlayerState, amount: number): number {
  * Next seat that still needs to act this street, scanning clockwise after
  * fromSeat. A player needs to act if they haven't matched the current bet or
  * haven't acted since the last full raise (blinds don't count as acting).
+ * A sole non-all-in player acts only to match a real active opponent's bet.
  */
 function findNextActor(state: GameState, fromSeat: number): number | null {
+  const active = state.players.filter((p) => !p.folded);
+  const ableToAct = active.filter((p) => !p.allIn);
+  if (ableToAct.length === 1) {
+    const sole = ableToAct[0];
+    return active.some((p) => p.streetBet > sole.streetBet) ? sole.seatIndex : null;
+  }
   const n = state.players.length;
   for (let i = 1; i <= n; i++) {
     const seat = (fromSeat + i) % n;
@@ -257,7 +295,7 @@ function closeStreetLoop(state: GameState, events: HandEvent[]): void {
     }
     dealNextStreet(state, events);
     if (active.filter((p) => !p.allIn).length >= 2) {
-      state.actionOn = findNextActor(state, state.buttonIndex);
+      state.actionOn = findNextActor(state, firstToReceive(state.players.length, state.smallBlindIndex, state.bigBlindIndex) - 1);
       return;
     }
     // 0 or 1 players can still act — no betting possible, keep dealing.
@@ -288,7 +326,7 @@ function returnUncalled(state: GameState, events: HandEvent[], uncalled: { seatI
 }
 
 function finishByFolds(state: GameState, events: HandEvent[], winner: PlayerState): void {
-  const { pots, uncalled } = buildPots(state.players);
+  const { pots, uncalled } = buildPots(state.players, state.antePot);
   if (uncalled) returnUncalled(state, events, uncalled);
   const total = pots.reduce((sum, pot) => sum + pot.amount, 0);
   winner.stack += total;
@@ -303,7 +341,7 @@ function finishByFolds(state: GameState, events: HandEvent[], winner: PlayerStat
 
 function showdown(state: GameState, events: HandEvent[]): void {
   const contenders = state.players.filter((p) => !p.folded);
-  const { pots, uncalled } = buildPots(state.players);
+  const { pots, uncalled } = buildPots(state.players, state.antePot);
   if (uncalled) returnUncalled(state, events, uncalled);
 
   const results = new Map<number, { value: number; description: string }>();
@@ -348,7 +386,7 @@ function showdown(state: GameState, events: HandEvent[]): void {
 
 function clockwiseFromButton(state: GameState, seat: number): number {
   const n = state.players.length;
-  return (seat - state.buttonIndex - 1 + 2 * n) % n;
+  return (seat - firstToReceive(n, state.smallBlindIndex, state.bigBlindIndex) + n) % n;
 }
 
 function completeHand(state: GameState, events: HandEvent[]): void {

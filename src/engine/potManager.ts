@@ -21,7 +21,7 @@ type Contributor = Pick<PlayerState, 'seatIndex' | 'totalCommitted' | 'folded'>;
  * committed at least up to it and haven't folded. Adjacent layers with the
  * same eligible set are merged, so a hand with no all-ins yields one pot.
  */
-export function buildPots(players: Contributor[]): PotBuildResult {
+export function buildPots(players: Contributor[], antePot = 0): PotBuildResult {
   const work = players
     .filter((p) => p.totalCommitted > 0)
     .map((p) => ({ seat: p.seatIndex, folded: p.folded, amount: p.totalCommitted }));
@@ -57,6 +57,11 @@ export function buildPots(players: Contributor[]): PotBuildResult {
       }
     }
     prev = level;
+  }
+  if (antePot > 0) {
+    const eligible = players.filter((p) => !p.folded).map((p) => p.seatIndex);
+    if (pots[0] && sameSet(pots[0].eligible, eligible)) pots[0].amount += antePot;
+    else pots.unshift({ amount: antePot, eligible });
   }
   return { pots, uncalled };
 }

@@ -25,8 +25,13 @@ export interface SeatConfig {
 export interface TableConfig {
   smallBlind: number;
   bigBlind: number;
-  /** Index into `seats` of the dealer button for this hand. */
-  buttonIndex: number;
+  /** Dead money paid by the big blind after its live blind; defaults to zero. */
+  bigBlindAnte?: number;
+  /** Index into `seats`, or null when the button is on an empty physical seat. */
+  buttonIndex: number | null;
+  /** Explicit live blind positions for tournament hands with empty seats. */
+  smallBlindIndex?: number | null;
+  bigBlindIndex?: number;
   /** Players dealt into this hand, in seat order. All stacks must be > 0. */
   seats: SeatConfig[];
 }
@@ -49,8 +54,8 @@ export interface PlayerState {
   totalCommitted: number;
   /**
    * Whether this player has acted since the last FULL raise this street.
-   * Blinds do not count as acting. Reset by full raises only — a short
-   * all-in raise does not re-open action (no new raise rights).
+   * Blinds do not count as acting. Reset by full raises only; cumulative
+   * short all-ins can also restore raise rights based on streetBet.
    */
   hasActed: boolean;
 }
@@ -81,9 +86,13 @@ export interface GameState {
   deck: Card[];
   deckIndex: number;
   players: PlayerState[];
-  buttonIndex: number;
+  buttonIndex: number | null;
+  smallBlindIndex: number | null;
+  bigBlindIndex: number;
   phase: GamePhase;
   board: Card[];
+  /** Dead ante chips: do not count toward calls, side-pot caps, or uncalled bets. */
+  antePot: number;
   /** Highest streetBet this round. */
   currentBet: number;
   /** Size of the last full bet/raise increment — the min-raise basis. */
@@ -102,19 +111,22 @@ export interface GameState {
 
 /** Sum of all chips committed to the pot this hand. */
 export function totalPot(state: GameState): number {
-  return state.players.reduce((sum, p) => sum + p.totalCommitted, 0);
+  return state.players.reduce((sum, p) => sum + p.totalCommitted, state.antePot);
+}
+
+/** First occupied seat left of the actual button, including a dead button. */
+export function firstToReceive(playerCount: number, smallBlindIndex: number | null, bigBlindIndex: number): number {
+  return playerCount === 2 ? bigBlindIndex : smallBlindIndex ?? bigBlindIndex;
 }
 
 /** Positions for the given player count, ordered from the button clockwise. */
 export function positionOfSeat(state: GameState, seatIndex: number): Position {
   const n = state.players.length;
-  const offset = (seatIndex - state.buttonIndex + n) % n;
-  if (n === 2) return offset === 0 ? 'SB' : 'BB'; // heads-up: button is SB
-  const byOffset: Record<number, Position[]> = {
-    3: ['BTN', 'SB', 'BB'],
-    4: ['BTN', 'SB', 'BB', 'UTG'],
-    5: ['BTN', 'SB', 'BB', 'UTG', 'CO'],
-    6: ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO'],
-  };
-  return byOffset[n][offset];
+  if (seatIndex === state.bigBlindIndex) return 'BB';
+  if (seatIndex === state.smallBlindIndex) return 'SB';
+  if (seatIndex === state.buttonIndex) return 'BTN';
+  const otherSeats = Array.from({ length: n }, (_, i) => (state.bigBlindIndex + i + 1) % n)
+    .filter((i) => i !== state.bigBlindIndex && i !== state.smallBlindIndex && i !== state.buttonIndex);
+  const positions: Record<number, Position[]> = { 1: ['UTG'], 2: ['UTG', 'CO'], 3: ['UTG', 'HJ', 'CO'] };
+  return positions[otherSeats.length][otherSeats.indexOf(seatIndex)];
 }

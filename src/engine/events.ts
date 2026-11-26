@@ -11,13 +11,16 @@ export type HandEvent =
   | {
       type: 'handStarted';
       handId: string;
-      buttonIndex: number;
+      buttonIndex: number | null;
+      smallBlindIndex: number | null;
+      bigBlindIndex: number;
       smallBlind: number;
       bigBlind: number;
       players: { seatIndex: number; id: string; name: string; stack: number }[];
     }
   | { type: 'holeCardsDealt'; cards: { seatIndex: number; cards: [Card, Card] }[] }
   | { type: 'blindPosted'; seatIndex: number; kind: 'small' | 'big'; amount: number; allIn: boolean }
+  | { type: 'antePosted'; seatIndex: number; amount: number; allIn: boolean }
   | {
       type: 'actionTaken';
       seatIndex: number;

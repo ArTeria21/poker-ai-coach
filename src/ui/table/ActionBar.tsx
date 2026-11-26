@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { useUiStore } from '../../store/uiStore';
 import { tableController } from '../../game/tableController';
 import { formatChips } from '../../game/format';
 import './ActionBar.css';
@@ -8,15 +7,9 @@ import './ActionBar.css';
 export function ActionBar() {
   const heroLegal = useGameStore((s) => s.heroLegal);
   const pot = useGameStore((s) => s.pot);
-  const seats = useGameStore((s) => s.seats);
+  const currentBet = useGameStore((s) => s.currentBet);
   const status = useGameStore((s) => s.status);
   const awaitingNext = useGameStore((s) => s.awaitingNext);
-  const setSummaryOpen = useUiStore((s) => s.setSummaryOpen);
-
-  const currentBet = useMemo(
-    () => seats.reduce((max, seat) => Math.max(max, seat.streetBet), 0),
-    [seats],
-  );
   const toCall = heroLegal?.call?.amount ?? 0;
   const raise = heroLegal?.raise;
 
@@ -30,9 +23,6 @@ export function ActionBar() {
       return (
         <div className="action-bar">
           <div className="action-buttons action-buttons--between">
-            <button className="btn btn--neutral" onClick={() => setSummaryOpen(true)}>
-              Hand summary
-            </button>
             <button className="btn btn--raise" onClick={() => tableController.continueNextHand()}>
               Deal next hand →
             </button>
@@ -43,7 +33,7 @@ export function ActionBar() {
     return (
       <div className="action-bar action-bar--waiting">
         <span className="waiting-text">
-          {status === 'playing' ? 'Waiting for the table…' : ''}
+          {status === 'playing' ? 'Waiting for the table…' : status === 'tournamentComplete' ? 'Tournament complete · Start a new SNG to play again' : ''}
         </span>
       </div>
     );
@@ -51,7 +41,7 @@ export function ActionBar() {
 
   const clamp = (v: number) => {
     if (!raise) return v;
-    const snapped = Math.round(v / 5) * 5;
+    const snapped = Math.round(v);
     return Math.max(raise.minTo, Math.min(raise.maxTo, snapped));
   };
 
@@ -68,7 +58,8 @@ export function ActionBar() {
     : [];
 
   const isBet = currentBet === 0;
-  const raiseIsAllIn = raise && raiseTo >= raise.maxTo;
+  const selectedRaiseTo = raise ? clamp(raiseTo || raise.minTo) : 0;
+  const raiseIsAllIn = raise && selectedRaiseTo >= raise.maxTo;
 
   return (
     <div className="action-bar">
@@ -89,9 +80,9 @@ export function ActionBar() {
         {raise && (
           <button
             className="btn btn--raise"
-            onClick={() => tableController.humanAct({ type: 'raise', amount: raiseTo })}
+            onClick={() => tableController.humanAct({ type: 'raise', amount: selectedRaiseTo })}
           >
-            {raiseIsAllIn ? 'All-in' : isBet ? 'Bet' : 'Raise to'} {formatChips(raiseTo)}
+            {raiseIsAllIn ? 'All-in' : isBet ? 'Bet' : 'Raise to'} {formatChips(selectedRaiseTo)}
           </button>
         )}
       </div>
@@ -102,8 +93,9 @@ export function ActionBar() {
             type="range"
             min={raise.minTo}
             max={raise.maxTo}
-            step={5}
-            value={raiseTo}
+            step={1}
+            value={selectedRaiseTo}
+            aria-label="Raise to"
             onChange={(e) => setRaiseTo(clamp(Number(e.target.value)))}
             className="raise-slider"
           />
@@ -111,7 +103,7 @@ export function ActionBar() {
             {presets.map((p) => (
               <button
                 key={p.label}
-                className={`preset${raiseTo === p.value ? ' preset--active' : ''}`}
+                className={`preset${selectedRaiseTo === p.value ? ' preset--active' : ''}`}
                 onClick={() => setRaiseTo(p.value)}
               >
                 {p.label}

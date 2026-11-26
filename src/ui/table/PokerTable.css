@@ -41,7 +41,7 @@
 
 .table-felt::before {
   /* embossed brand on the felt */
-  content: 'POKER MENTOR';
+  content: 'SINGLE TABLE';
   position: absolute;
   left: 50%;
   top: 68%;
@@ -257,6 +257,8 @@
   opacity: 0.42;
   filter: grayscale(0.7);
 }
+
+.seat--eliminated .seat-pod { opacity: 0.5; border-style: dashed; }
 
 /* seat placement (display slots: 0 = hero bottom, clockwise) */
 .seat--pos0 { left: 50%; top: 99%; }
@@ -500,7 +502,8 @@
   font-weight: 600;
   font-size: 17px;
   color: var(--brass-bright);
-  white-space: nowrap;
+  max-width: 90%;
+  text-align: center;
   animation: banner-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
 }
 
@@ -536,8 +539,8 @@
 
   /* a wide oval can't fit a portrait phone — stand it upright */
   .table-oval {
-    width: auto;
-    height: min(97%, 175vw);
+    width: min(100%, 380px);
+    height: auto;
     aspect-ratio: 1 / 1.35;
     max-height: none;
   }

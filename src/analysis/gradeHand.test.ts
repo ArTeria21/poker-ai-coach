@@ -15,6 +15,7 @@ function view(partial: Partial<BotView>): BotView {
     phase: 'turn',
     position: 'BB',
     pot: 300,
+    antePot: 0,
     toCall: 250,
     currentBet: 250,
     myStreetBet: 0,

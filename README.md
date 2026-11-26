@@ -1,211 +1,71 @@
-# ♠ Poker Mentor
+# Poker AI-Coach
 
-**English** · [فارسی](#farsi)
+A browser-based, six-player No-Limit Hold'em single-table tournament against five bots. The current implementation covers tournament rules, chip accounting, the table, and standings. AI coaching, ICM calculations, and range-based analysis are later stages described in [PROJECT.md](PROJECT.md).
 
-[![MIT License](https://img.shields.io/badge/license-MIT-c9a25e?style=for-the-badge)](LICENSE)
-[![Buy Me A Coffee](https://img.shields.io/badge/☕_Buy_me_a_coffee-FFDD00?style=for-the-badge&logoColor=black)](https://buymeacoffee.com/Hessamsh)
+The table opens automatically. Play your actions, then choose **Deal next hand** when ready. If you are eliminated, you can continue watching the remaining players. **New SNG** starts a fresh tournament. The tournament stays in memory; refreshing the page starts again.
 
-**A No-Limit Texas Hold'em trainer that teaches you real poker while you play it.**
+## Run locally
 
-Poker Mentor is a single-player, browser-based poker game with a built-in coach. You sit at a 6-max table against five opponents with genuinely different playing styles, and every layer of the app is designed to make you a better player: a live coach explains the math behind every decision, each hand you finish is graded street by street, an interactive curriculum teaches the fundamentals, and long-term stats find your leaks and point you at the lesson that fixes them.
-
-No accounts, no real money, no gambling — just a fast way to learn the most popular card game in the world without donating chips to strangers while you do it.
-
----
-
-## Features
-
-### 🎰 A real poker game
-- Full No-Limit Texas Hold'em engine: blinds, betting rounds, side pots, split pots, min-raise rules (including the short all-in edge cases most implementations get wrong)
-- Five AI opponents with distinct, data-driven personalities:
-  - **Selena "The Shark"** — solid, balanced, aggressive when it counts
-  - **Rocky the Rock** — folds everything; when he bets, run
-  - **"Mad" Marta** — raises with anything, especially nothing
-  - **Finn the Fish** — calls with any two cards, any price
-  - **Norm the Nit** — waiting for aces since 2019
-- Real bluffing: semi-bluffs with draws, continuation bets, street-aware bluff frequencies — and bots that occasionally *show* you the bluff they just stole a pot with
-- Three difficulty levels: on Hard, bots use real equity simulation and exploit your tendencies
-- Table talk, synthesized sound effects, card and chip animations — all toggleable, mobile-friendly
-
-### 🎓 A coach at the table
-- **Live coach** (toggleable): on every decision, see your current hand, your win probability (Monte Carlo simulation running in a web worker), the pot odds, and a recommended action with a one-paragraph explanation of *why*
-- **Post-hand review**: every decision you made is graded — good / okay / mistake / blunder — against the coach's analysis, chess.com style
-- **Hand summary screen**: after every hand, the full hand-ranking ladder appears with the winning hand marked on it — and *your* hand marked too, even when you folded. The game waits until you're done studying before dealing the next hand
-- **Hand replay**: scrub through any past hand street by street with all hole cards revealed, your grades attached to each decision
-
-### 📚 A curriculum
-Eight interactive lessons: hand rankings → position → preflop ranges → pot odds & outs → board reading → value betting → bluffing → bankroll & tilt. Each lesson ends in drills — including "which hand wins?" puzzles rendered with real cards and table scenarios judged by the same coach logic used in the game, so the lessons can never disagree with the gameplay.
-
-### 📈 A mirror
-- Persistent stats: win rate (BB/100), VPIP, PFR, decision quality, bankroll curve
-- **Leak detection**: rule-based analysis over your history ("you call too much without the right price") with each leak linking to the lesson that addresses it
-- **Cross-device sync**: lesson progress and hand history sync through the bundled server, so you can play on your desktop and review on your phone
-
----
-
-## Quick start
-
-```bash
-npm install
-npm run dev        # → http://localhost:5173
-```
-
-Run the test suite (see [Testing](#testing) for why there are so many):
-
-```bash
-npm test
-```
-
-## Deployment
-
-The app ships as a single Docker container: a static build served by a zero-dependency Node server that also provides the sync API.
-
-```bash
-docker build -t poker-mentor .
-docker run -d --name poker-mentor \
-  --restart unless-stopped \
-  -p 8484:80 \
-  -v poker-mentor-data:/data \
-  poker-mentor
-```
-
-Open `http://<host>:8484`. The `/data` volume holds synced progress and hand history; without it, sync still works but data dies with the container. Without any server (plain `npm run dev`), the app transparently falls back to browser-local storage.
-
----
-
-## Architecture
-
-The design rule that shapes everything: **game logic is pure TypeScript with zero React/DOM imports.** Every hand is fully determined by `{config, seed, actions[]}` and emits a typed event log — one source of truth consumed by three clients: UI animations, post-hand analysis/replay, and stats.
-
-```
-src/
-├─ engine/     Event-sourced NLHE state machine. Deterministic (seeded RNG),
-│              replayable, exhaustively tested. Side pots, min-raise rules,
-│              hand evaluation (phe, cross-validated against pokersolver).
-├─ bots/       Personalities as config objects (VPIP by position, aggression,
-│              bluff frequency...). Tuning a bot = editing numbers.
-├─ equity/     Monte Carlo equity simulation, run in a Web Worker.
-│              5k iterations ≈ ±0.7% in under 20ms.
-├─ coach/      Preflop chart lookups + postflop equity-vs-pot-odds reasoning,
-│              with template explanations. Pure functions.
-├─ analysis/   Replays the event log, grades every hero decision, and builds
-│              the end-of-hand summary.
-├─ lessons/    Data-driven curriculum. Drill answers are verified against the
-│              real evaluator and coach at build time.
-├─ stats/      Aggregation (VPIP/PFR/BB-100), rule-based leak detection,
-│              IndexedDB persistence.
-├─ game/       The one stateful orchestrator (table controller), sounds, sync.
-├─ store/      Zustand stores — thin bridges between logic and UI.
-└─ ui/         React components. Receives sanitized snapshots only: bot hole
-               cards physically never reach the UI until showdown.
-server.js      Zero-dependency static file server + JSON sync API.
-```
-
-## Testing
-
-Poker rules are easy to get subtly wrong, so correctness is proven rather than assumed:
-
-- **Evaluator cross-validation** — 10,000 random showdowns compared against a second, independent evaluator library
-- **Property-based tests** (fast-check) — hundreds of randomized hands asserting chips are never created or destroyed and every hand terminates, across arbitrary stack sizes and action sequences
-- **Replay determinism** — any recorded hand replays to the exact same final state
-- **Side-pot fixtures** — hand-written multi-way all-in scenarios with known answers, including the short-all-in-doesn't-reopen-betting rule
-- **Statistical playtests** — hundreds of auto-played hands asserting each bot personality's measured VPIP/PFR — and bluffing frequency — actually matches its design
-- **Self-verifying curriculum** — every "which hand wins?" drill is checked against the evaluator and every scenario drill against the coach; wrong lesson content fails the build
-
-## Tech stack
-
-Vite · React · TypeScript (strict) · Zustand · [phe](https://github.com/thlorenz/phe) hand evaluator · Web Workers · IndexedDB (`idb`) · Vitest + fast-check · WebAudio (all sounds synthesized, no assets) · Docker
-
-## Support
-
-If Poker Mentor helped your game, you can support development here:
-
-☕ **[buymeacoffee.com/Hessamsh](https://buymeacoffee.com/Hessamsh)**
-
-## Roadmap
-
-- [ ] Opponent range modeling for even more honest equity numbers
-- [ ] "Show bot's thinking" — the decision trace already exists behind the scenes
-- [ ] More variants (Omaha) and table sizes
-- [ ] UI translations (Farsi first)
-- [ ] Optional multiplayer
-
-## License
-
-[MIT](LICENSE) — use it, learn from it, fork it.
-
-*Poker Mentor is a training tool. It uses play chips only, involves no wagering, and is not affiliated with any real-money gaming service.*
-
----
-
-<a id="farsi"></a>
-
-# ♠ پوکر منتور (Poker Mentor)
-
-[English](#-poker-mentor) · **فارسی**
-
-<div dir="rtl">
-
-**بازی تگزاس هولدم بدون محدودیت (No-Limit Texas Hold'em) که در حین بازی، پوکر واقعی به شما یاد می‌دهد.**
-
-پوکر منتور یک بازی پوکر تک‌نفرهٔ تحت مرورگر با مربی داخلی است. پشت یک میز شش‌نفره مقابل پنج حریف هوش مصنوعی با سبک‌های کاملاً متفاوت می‌نشینید و تمام بخش‌های برنامه برای این طراحی شده‌اند که شما را بازیکن بهتری کنند: مربیِ زنده ریاضیاتِ پشت هر تصمیم را توضیح می‌دهد، هر دستی که بازی می‌کنید مرحله‌به‌مرحله نمره می‌گیرد، درس‌های تعاملی اصول بازی را آموزش می‌دهند و آمار بلندمدت، نقاط ضعف شما را پیدا کرده و به درسِ مربوطه ارجاع می‌دهد.
-
-بدون ثبت‌نام، بدون پول واقعی و بدون قمار — فقط راهی سریع برای یادگیری محبوب‌ترین بازی کارتی جهان، بدون اینکه هنگام یادگیری ژتون‌هایتان را به دیگران هدیه بدهید.
-
-## امکانات
-
-- 🎰 **موتور کامل پوکر**: بلایندها، دورهای شرط‌بندی، پات‌های فرعی (side pot)، قوانین حداقلِ رِیز — همان جزئیاتی که بیشتر پیاده‌سازی‌ها اشتباه می‌گیرند
-- 🤖 **پنج حریف با شخصیت‌های متمایز**: از «راکیِ سنگ» که همه‌چیز را فولد می‌کند تا «مارتای دیوانه» که با هیچ‌وپوچ رِیز می‌زند — و گاهی بلوفش را به شما نشان می‌دهد!
-- 🎓 **مربی زنده**: در هر تصمیم، شانس بردتان (با شبیه‌سازی مونت‌کارلو)، پات آدز و حرکت پیشنهادی را همراه با توضیحِ دلیل آن می‌بینید
-- 📊 **مرور بعد از هر دست**: هر تصمیم شما در مقایسه با تحلیل مربی نمره می‌گیرد — درست / قابل قبول / اشتباه / فاجعه
-- 🃏 **صفحهٔ جمع‌بندی دست**: بعد از هر دست، جدول کامل رتبه‌بندی دست‌های پوکر نمایش داده می‌شود؛ دستِ برنده و دستِ خودِ شما (حتی وقتی فولد کرده‌اید) روی جدول علامت می‌خورد و بازی تا وقتی دکمهٔ «دست بعد» را نزنید صبر می‌کند
-- ▶️ **بازپخش دست‌ها**: هر دستِ گذشته را حرکت‌به‌حرکت مرور کنید، با کارت‌های همهٔ بازیکنان رو
-- 📚 **هشت درس تعاملی**: از رتبه‌بندی دست‌ها و اهمیت جایگاه (پوزیشن) تا پات آدز، بلوف و مدیریت سرمایه — با تمرین‌های تعاملی
-- 📈 **آمار و کشف نقاط ضعف**: نرخ برد، VPIP/PFR، نمودار سرمایه و گزارش «لیک‌ها» با لینک به درسِ درمانش
-- 📱 سازگار با موبایل، با افکت‌های صوتی و هماهنگ‌سازی پیشرفت بین دستگاه‌ها
-
-> رابط کاربری بازی در حال حاضر به زبان انگلیسی است؛ ترجمهٔ فارسی رابط در نقشهٔ راه پروژه قرار دارد.
-
-## اجرای سریع
-
-</div>
-
-```bash
+```sh
 npm install
 npm run dev
 ```
 
-<div dir="rtl">
-
-سپس آدرس `http://localhost:5173` را در مرورگر باز کنید. برای اجرای تست‌ها: `npm test`
-
-## اجرا با داکر
-
-</div>
-
-```bash
-docker build -t poker-mentor .
-docker run -d --name poker-mentor \
-  --restart unless-stopped \
-  -p 8484:80 \
-  -v poker-mentor-data:/data \
-  poker-mentor
+```sh
+npm test
+npm run build
+npm run preview
 ```
 
-<div dir="rtl">
+## Tournament format
 
-سپس `http://<آدرس-سرور>:8484` را باز کنید. حجم `/data` تاریخچهٔ دست‌ها و پیشرفت درس‌ها را نگه می‌دارد تا بین دستگاه‌های شما همگام بماند.
+- Six players start with **2,000 chips** each: **12,000 total chips**, with no rebuys or add-ons.
+- Levels last **six completed hands**, so time spent thinking does not advance the blinds. The new level takes effect when the next hand is dealt. The final level remains in effect until there is a winner.
+- The big blind pays the **live blind first**, then as much of the big blind ante as its remaining stack allows. BBA continues at its full listed amount heads-up.
+- Ante chips are dead money in the main pot. They do not count toward a call, raise, side-pot limit, or an uncalled-bet refund. A short stack can win the whole ante: at 4/8 with an ante of 8, a player all-in for 1 can win 11 from the main pot.
+- Eliminated players keep their physical seat. The dead button can occupy an empty seat; dealing order, postflop action, and odd-chip awards follow the actual button. When heads-up begins, the button is the small blind and the previous surviving big blind does not pay BB again immediately.
+- Prize pool shares are **65% for first** and **35% for second**. These are percentages, with no cash buy-in or ICM calculation.
+- Simultaneous eliminations are ordered by starting stack **after the ante actually paid**, with a larger stack finishing higher. This project applies that convention to every simultaneous elimination; TDA Rule 22 explicitly discusses the after-ante treatment for in-the-money eliminations.
+- Equal after-ante starting stacks tie for the same place. Their shares are the sum of the payouts for the occupied places divided by the number of tied players. A tie for second and third pays each 17.5%; a tie across second through fourth pays each 35% / 3. The interface displays fractional percentages to four decimal places.
 
-## حمایت از پروژه
+The level lengths, blind schedule, full BBA heads-up, payouts, and application of the after-ante ranking convention to every elimination are this app's house format. Rule references: [Poker TDA rules](https://www.pokertda.com/view-poker-tda-rules/) and [Big Blind Ante rules with a short-stack example](https://www.casinosofwinnipeg.com/wp-content/uploads/2018/11/Big-Blind-Ante-Rules.pdf).
 
-اگر پوکر منتور به بازی شما کمک کرد، می‌توانید از توسعهٔ آن حمایت کنید:
+| Level | Small blind | Big blind | Big blind ante |
+| --- | ---: | ---: | ---: |
+| 1 | 10 | 20 | 0 |
+| 2 | 15 | 30 | 0 |
+| 3 | 25 | 50 | 50 |
+| 4 | 50 | 100 | 100 |
+| 5 | 75 | 150 | 150 |
+| 6 | 100 | 200 | 200 |
+| 7 | 150 | 300 | 300 |
+| 8 | 200 | 400 | 400 |
+| 9 | 300 | 600 | 600 |
+| 10 | 500 | 1,000 | 1,000 |
+| 11 | 750 | 1,500 | 1,500 |
+| 12 | 1,000 | 2,000 | 2,000 |
+| 13 | 2,000 | 4,000 | 4,000 |
+| 14 | 4,000 | 8,000 | 8,000 |
+| 15 | 8,000 | 16,000 | 16,000 |
 
-☕ **[buymeacoffee.com/Hessamsh](https://buymeacoffee.com/Hessamsh)**
+## Current interface
 
-## مجوز
+The hand log sits above the table; action controls sit below it. The right panel shows the current level, ante, remaining players, prize shares, and standings. All six physical seats remain visible after elimination, including a dead dealer button. Folded bot cards stay hidden unless the bot voluntarily shows its winning hand; showdown cards are revealed by the engine.
 
-این پروژه تحت مجوز [MIT](LICENSE) منتشر شده است — آزادانه استفاده کنید، یاد بگیرید و توسعه دهید.
+The five bots retain their existing personalities and easy/medium/hard settings. Their current policy uses starting-hand tiers, hand/draw strength, and configured tendencies. It does not use an LLM or a Monte Carlo decision policy on hard difficulty. The old curriculum, live template coach, stats, replay UI, post-hand review, summary modal, and automatic cash-table rebuy are removed.
 
-*پوکر منتور یک ابزار آموزشی است: فقط با ژتون‌های مجازی کار می‌کند، هیچ شرط‌بندی واقعی در کار نیست و به هیچ سرویس قمار با پول واقعی وابسته نیست.*
+## Architecture and checks
 
-</div>
+- `src/engine/`: deterministic NLHE hands, legal actions, separate BBA accounting, side pots, evaluation, and pure replay. A hand is reproducible from its configuration, seed, and actions.
+- `src/game/tournament.ts`: pure tournament lifecycle, physical markers, blind levels, eliminations, and prize shares.
+- `src/game/tableController.ts`: paced play, human/bot turns, cancellation, and public snapshots.
+- `src/store/` and `src/ui/`: Zustand snapshots and React UI. Private deck and hidden bot cards do not enter the UI store.
+- `src/bots/`: existing deterministic bot policies. `src/coach/`, `src/analysis/gradeHand.ts`, and `src/equity/` retain pure groundwork for later stages; they are not presented as a live coach.
+
+Tests cover evaluator cross-checks, betting rules, chip conservation during hands, ante and side-pot fixtures, replay, dead-button/HU positions, blind-level boundaries, simultaneous elimination payouts, controller cancellation/restarts, spectator play, and completed tournaments.
+
+The stack is TypeScript, React, Vite, Zustand, `phe`, Vitest, and fast-check. No backend or credentials are needed for the current SNG.
+
+## License and origin
+
+[MIT](LICENSE). Based on [Easternguy/poker-mentor](https://github.com/Easternguy/poker-mentor), with the direction and implementation changes described in [PROJECT.md](PROJECT.md).

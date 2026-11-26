@@ -29,6 +29,21 @@ function riggedDeck(buttonIndex: number, holes: [Card, Card][], board: Card[]): 
 const BOARD = ['Kd', '8c', '2s', '6h', 'Jc'];
 
 describe('preflop coach', () => {
+  it.each([false, true])('keeps ante in pot odds, but not in the limper count (real limper: %s)', (limped) => {
+    const deck = riggedDeck(0, [['As', 'Ah'], ['5c', '5d'], ['9h', '9c'], ['Ks', 'Kh']], BOARD);
+    const advice = [0, 10].map((bigBlindAnte) => {
+      let { state } = startHandWithDeck({ ...config([1000, 1000, 1000, 1000]), bigBlindAnte }, deck);
+      if (limped) state = applyAction(state, { type: 'call' }).state;
+      const view = buildBotView(state, state.actionOn!);
+      expect(view.pot).toBe(15 + (limped ? 10 : 0) + bigBlindAnte);
+      return preflopAdvice(view);
+    });
+    expect(advice[0].raiseTo).toBe(limped ? 40 : 30);
+    expect(advice[1].raiseTo).toBe(advice[0].raiseTo);
+    expect(advice[0].requiredEquity).toBeCloseTo(10 / (25 + (limped ? 10 : 0)));
+    expect(advice[1].requiredEquity).toBeCloseTo(10 / (35 + (limped ? 10 : 0)));
+  });
+
   it('folds 72o under the gun', () => {
     // 4-handed, button 0 → seat 3 is UTG (first to act)
     const deck = riggedDeck(0, [['Ac', 'Kc'], ['5c', '5d'], ['9h', '9c'], ['7h', '2c']], BOARD);
@@ -72,6 +87,7 @@ describe('postflop coach', () => {
       phase: 'flop' as const,
       position: 'BTN' as const,
       pot: 100,
+      antePot: 0,
       toCall: 20,
       currentBet: 20,
       myStreetBet: 0,
@@ -94,6 +110,7 @@ describe('postflop coach', () => {
       phase: 'turn' as const,
       position: 'BB' as const,
       pot: 300,
+      antePot: 0,
       toCall: 250,
       currentBet: 250,
       myStreetBet: 0,
@@ -115,6 +132,7 @@ describe('postflop coach', () => {
       phase: 'flop' as const,
       position: 'BTN' as const,
       pot: 60,
+      antePot: 0,
       toCall: 0,
       currentBet: 0,
       myStreetBet: 0,

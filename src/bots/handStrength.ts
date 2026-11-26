@@ -1,6 +1,6 @@
 import type { Card } from '../engine/types';
 import { rankIndex, suitIndex } from '../engine/deck';
-import { analyzeHand } from '../engine/handEval';
+import { analyzeHand, bestStraightHigh } from '../engine/handEval';
 
 export interface StrengthInfo {
   /** 0..1 heuristic — made hand plus draw potential. */
@@ -52,8 +52,8 @@ export function postflopStrength(hole: [Card, Card], board: Card[]): StrengthInf
   }
 
   // draws only exist while there are cards to come
-  const flushDraw = board.length < 5 && category > 3 && hasFlushDraw(all);
-  const straightDraw = board.length < 5 && category > 4 ? straightDrawType(all) : null;
+  const flushDraw = board.length < 5 && category > 3 && hasFlushDraw(hole, board);
+  const straightDraw = board.length < 5 && category > 4 ? straightDrawType(hole, board) : null;
 
   let strength = base;
   if (board.length < 5 && base < 0.6) {
@@ -95,28 +95,33 @@ function pairStrength(hole: [Card, Card], board: Card[]): number {
   return 0.3; // bottom pair
 }
 
-function hasFlushDraw(cards: Card[]): boolean {
+function hasFlushDraw(hole: [Card, Card], board: Card[]): boolean {
   const suitCounts = [0, 0, 0, 0];
-  for (const c of cards) suitCounts[suitIndex(c)]++;
-  return suitCounts.some((n) => n === 4);
+  for (const c of [...hole, ...board]) suitCounts[suitIndex(c)]++;
+  return suitCounts.some((n, suit) => n === 4 && hole.some((c) => suitIndex(c) === suit));
 }
 
-function straightDrawType(cards: Card[]): 'oesd' | 'gutshot' | null {
+function straightDrawType(hole: [Card, Card], board: Card[]): 'oesd' | 'gutshot' | null {
   const present = new Array<boolean>(13).fill(false);
-  for (const c of cards) present[rankIndex(c)] = true;
+  for (const c of [...hole, ...board]) present[rankIndex(c)] = true;
+  const boardPresent = new Array<boolean>(13).fill(false);
+  for (const c of board) boardPresent[rankIndex(c)] = true;
+  const personalOuts = present.map((hasRank, rank) => {
+    if (hasRank) return false;
+    const completed = present.map((has, r) => has || r === rank);
+    const completedBoard = boardPresent.map((has, r) => has || r === rank);
+    return bestStraightHigh(completed) > bestStraightHigh(completedBoard);
+  });
   const at = (r: number) => present[r === -1 ? 12 : r]; // ace plays low
 
   // open-ended: 4 consecutive ranks with room to fill on either side
-  for (let lo = 0; lo <= 9; lo++) {
-    if (at(lo) && at(lo + 1) && at(lo + 2) && at(lo + 3)) {
-      if (lo > 0 || lo + 4 <= 12) return 'oesd';
+  for (let lo = 0; lo <= 8; lo++) {
+    if (
+      at(lo) && at(lo + 1) && at(lo + 2) && at(lo + 3) &&
+      personalOuts[lo === 0 ? 12 : lo - 1] && personalOuts[lo + 4]
+    ) {
+      return 'oesd';
     }
   }
-  // gutshot: some 5-card straight window has exactly 4 of its ranks
-  for (let hi = 12; hi >= 3; hi--) {
-    let count = 0;
-    for (let k = 0; k < 5; k++) if (at(hi - k)) count++;
-    if (count === 4) return 'gutshot';
-  }
-  return null;
+  return personalOuts.some(Boolean) ? 'gutshot' : null;
 }

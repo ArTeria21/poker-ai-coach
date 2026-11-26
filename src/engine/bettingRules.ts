@@ -7,14 +7,20 @@ import type { GameState, LegalActions } from './types';
  * No-limit rules implemented here:
  * - Min opening bet = one big blind.
  * - Min raise = current bet + the last full bet/raise increment.
- * - An all-in for less than a full raise is allowed (maxTo), but it does NOT
- *   re-open action: a player who already acted (hasActed) keeps no raise
- *   rights — full raises reset hasActed for everyone else, short all-ins don't.
+ * - An all-in for less than a full raise is allowed (maxTo). For a player who
+ *   already acted, short all-ins re-open raising only when their cumulative
+ *   increase since that player's last action reaches the last full increment.
  */
 export function legalActions(state: GameState): LegalActions | null {
   if (state.phase === 'complete' || state.actionOn === null) return null;
   const p = state.players[state.actionOn];
-  const toCall = state.currentBet - p.streetBet;
+  const opponents = state.players.filter((q) => q !== p && !q.folded);
+  const canRaise = opponents.some((q) => !q.allIn);
+  // Against only all-ins, match real commitments rather than a nominal short BB.
+  const currentBet = canRaise
+    ? state.currentBet
+    : Math.max(p.streetBet, ...opponents.map((q) => q.streetBet));
+  const toCall = currentBet - p.streetBet;
 
   const la: LegalActions = {
     seatIndex: p.seatIndex,
@@ -26,7 +32,7 @@ export function legalActions(state: GameState): LegalActions | null {
   }
 
   const maxTo = p.streetBet + p.stack;
-  if (!p.hasActed && maxTo > state.currentBet) {
+  if (canRaise && (!p.hasActed || toCall >= state.lastRaiseAmount) && maxTo > state.currentBet) {
     const fullMin =
       state.currentBet === 0
         ? state.config.bigBlind

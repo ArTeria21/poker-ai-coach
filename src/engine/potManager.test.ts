@@ -6,6 +6,27 @@ function player(seatIndex: number, totalCommitted: number, folded = false) {
 }
 
 describe('buildPots', () => {
+  it('adds the ante to the main pot without increasing side-pot eligibility', () => {
+    expect(buildPots([player(0, 10), player(1, 100), player(2, 100)], 20)).toEqual({
+      pots: [{ amount: 50, eligible: [0, 1, 2] }, { amount: 180, eligible: [1, 2] }],
+      uncalled: null,
+    });
+  });
+
+  it('never returns ante chips with an uncalled live bet', () => {
+    expect(buildPots([player(0, 5, true), player(1, 10)], 10)).toEqual({
+      pots: [{ amount: 20, eligible: [1] }],
+      uncalled: { seatIndex: 1, amount: 5 },
+    });
+  });
+
+  it('keeps ante eligibility for a non-folded player with no live contribution', () => {
+    expect(buildPots([player(0, 0), player(1, 10), player(2, 10)], 5)).toEqual({
+      pots: [{ amount: 5, eligible: [0, 1, 2] }, { amount: 20, eligible: [1, 2] }],
+      uncalled: null,
+    });
+  });
+
   it('single pot when everyone committed the same', () => {
     const { pots, uncalled } = buildPots([player(0, 100), player(1, 100), player(2, 100)]);
     expect(uncalled).toBeNull();

@@ -50,6 +50,25 @@ describe('preflop tiers', () => {
 });
 
 describe('bot sanity', () => {
+  it.each([false, true])('does not count ante as a limper (real limper: %s)', (limped) => {
+    const deck = riggedDeck(0, [['As', 'Ah'], ['5c', '5d'], ['9h', '9c'], ['Ks', 'Kh']], ['3c', '8d', 'Jh', '4s', '9s']);
+    const decisions = [0, 10].map((bigBlindAnte) => {
+      let { state } = startHandWithDeck({ ...config([1000, 1000, 1000, 1000]), bigBlindAnte }, deck);
+      if (limped) state = applyAction(state, { type: 'call' }).state;
+      return decideAction(buildBotView(state, state.actionOn!), PERSONALITIES.rock, 'hard', () => 0.1);
+    });
+    expect(decisions[0].action).toEqual({ type: 'raise', amount: limped ? 40 : 30 });
+    expect(decisions[1]).toEqual(decisions[0]);
+  });
+
+  it('shows the real remaining call against an all-in short big blind', () => {
+    let { state } = startHand(config([1000, 1000, 7]), 42);
+    state = applyAction(state, { type: 'fold' }).state;
+    const view = buildBotView(state, 1);
+    expect(view.legal.call).toEqual({ amount: 2, allIn: false });
+    expect(view.toCall).toBe(2);
+  });
+
   it('the Rock folds 72o from UTG every time (100 samples)', () => {
     // 4-handed, button 0 → seat 3 is UTG and gets 7h 2c
     const deck = riggedDeck(

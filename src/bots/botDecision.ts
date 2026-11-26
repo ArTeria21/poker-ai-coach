@@ -19,6 +19,8 @@ export interface BotView {
   position: Position;
   /** Total chips in the pot (all commitments so far). */
   pot: number;
+  /** Actual ante paid this hand; dead money is not a limper's live bet. */
+  antePot: number;
   toCall: number;
   currentBet: number;
   myStreetBet: number;
@@ -51,7 +53,8 @@ export function buildBotView(state: GameState, seatIndex: number): BotView {
     phase: state.phase,
     position: positionOfSeat(state, seatIndex),
     pot: totalPot(state),
-    toCall: Math.min(state.currentBet - p.streetBet, p.stack),
+    antePot: state.antePot,
+    toCall: la.call?.amount ?? 0,
     currentBet: state.currentBet,
     myStreetBet: p.streetBet,
     myStack: p.stack,
@@ -109,7 +112,7 @@ function decidePreflop(
     }
     if (tier <= threshold) {
       if (rng() < p.pfrRatio) {
-        const limpers = Math.max(0, Math.round(view.pot / view.bigBlind - 1.5));
+        const limpers = Math.max(0, Math.round((view.pot - view.antePot) / view.bigBlind - 1.5));
         trace.push(`open-raising (${limpers} limpers ahead)`);
         return raiseTo((3 + limpers) * view.bigBlind);
       }

@@ -1,12 +1,10 @@
 import { create } from 'zustand';
 import type { ActionType, Card, GamePhase, LegalActions } from '../engine/types';
-import type { CoachAdvice } from '../coach/recommend';
-import type { HandGrade } from '../analysis/gradeHand';
-import type { HandSummary } from '../analysis/handSummary';
+import type { TournamentState } from '../game/tournament';
 
 /**
  * UI-facing snapshot of the table. SANITIZED: bot hole cards are null until
- * showdown reveals them — components physically cannot leak what they don't
+ * a public reveal — components physically cannot leak what they don't
  * receive. Only the table controller writes to this store.
  */
 export interface SeatView {
@@ -20,7 +18,7 @@ export interface SeatView {
   streetBet: number;
   folded: boolean;
   allIn: boolean;
-  /** Visible cards: hero always; bots only at showdown. */
+  /** Visible cards: hero always; bots only after a public reveal. */
   holeCards: [Card, Card] | null;
   /** Whether this seat holds (face-down) cards right now. */
   hasCards: boolean;
@@ -30,12 +28,14 @@ export interface SeatView {
   /** Showdown hand description, e.g. "Two Pair, Kings and Nines". */
   showdownDescription: string | null;
   wonAmount: number | null;
-  sittingOut: boolean;
+  eliminated: boolean;
 }
 
-export type TableStatus = 'idle' | 'playing' | 'handComplete' | 'heroBusted';
+export type TableStatus = 'idle' | 'playing' | 'handComplete' | 'tournamentComplete';
 
 export interface GameViewState {
+  /** Settled/prehand stacks and standings, no private cards; live stacks are in seats. */
+  tournament: TournamentState | null;
   status: TableStatus;
   handNumber: number;
   phase: GamePhase | null;
@@ -43,14 +43,9 @@ export interface GameViewState {
   board: Card[];
   pot: number;
   bigBlind: number;
+  currentBet: number;
   /** Non-null exactly when the UI should show the action bar. */
   heroLegal: LegalActions | null;
-  /** Live coach advice for the current hero decision (null = hidden). */
-  coach: CoachAdvice | null;
-  /** Post-hand review of the hero's decisions (null until graded). */
-  review: HandGrade | null;
-  /** End-of-hand study screen data. */
-  summary: HandSummary | null;
   /** True while the game is paused waiting for "deal next hand". */
   awaitingNext: boolean;
   /** One-liner banner at hand end, e.g. "Selena wins 300 with a flush". */
@@ -62,17 +57,16 @@ export interface GameViewState {
 }
 
 const initialState: GameViewState = {
+  tournament: null,
   status: 'idle',
   handNumber: 0,
   phase: null,
   seats: [],
   board: [],
   pot: 0,
-  bigBlind: 10,
+  bigBlind: 20,
+  currentBet: 0,
   heroLegal: null,
-  coach: null,
-  review: null,
-  summary: null,
   awaitingNext: false,
   banner: null,
   log: [],

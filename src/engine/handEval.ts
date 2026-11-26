@@ -42,7 +42,7 @@ export interface HandAnalysis {
  * Best straight within the given rank presence; returns the high card's rank
  * index (3 = five-high wheel .. 12 = ace-high broadway) or -1 if none.
  */
-function bestStraightHigh(present: boolean[]): number {
+export function bestStraightHigh(present: boolean[]): number {
   for (let hi = 12; hi >= 3; hi--) {
     let ok = true;
     for (let k = 0; k < 5; k++) {

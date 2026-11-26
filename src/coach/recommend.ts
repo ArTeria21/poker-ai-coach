@@ -58,7 +58,7 @@ export function preflopAdvice(view: BotView): CoachAdvice {
   if (!facingRaise) {
     const openTier = OPEN_TIER_BY_POSITION[view.position];
     if (tier <= openTier && view.legal.raise) {
-      const limpers = Math.max(0, Math.round(view.pot / view.bigBlind - 1.5));
+      const limpers = Math.max(0, Math.round((view.pot - view.antePot) / view.bigBlind - 1.5));
       const target = Math.min((3 + limpers) * view.bigBlind, view.legal.raise.maxTo);
       return {
         action: 'raise',

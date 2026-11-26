@@ -12,15 +12,8 @@ export function PokerTable() {
   const banner = useGameStore((s) => s.banner);
   const quips = useGameStore((s) => s.quips);
 
-  const heroIndex = Math.max(0, seats.findIndex((s) => s.isHero));
-  const n = seats.length;
-  const displaySlot = (seatIndex: number) => {
-    if (n === 0) return 0;
-    // rotate so the hero is always display slot 0 (bottom center); spread
-    // remaining players around the 6 visual slots
-    const rel = (seatIndex - heroIndex + n) % n;
-    return n === 6 ? rel : Math.round((rel * 6) / n) % 6;
-  };
+  const heroIndex = seats.find((s) => s.isHero)?.seatIndex ?? 0;
+  const displaySlot = (seatIndex: number) => (seatIndex - heroIndex + 6) % 6;
 
   return (
     <div className="table-zone">
@@ -64,6 +57,7 @@ function Seat({ seat, slot, quip }: { seat: SeatView; slot: number; quip: string
     'seat',
     `seat--pos${slot}`,
     seat.folded ? 'seat--folded' : '',
+    seat.eliminated ? 'seat--eliminated' : '',
     seat.isActing ? 'seat--acting' : '',
     seat.wonAmount != null ? 'seat--winner' : '',
   ]
@@ -74,7 +68,7 @@ function Seat({ seat, slot, quip }: { seat: SeatView; slot: number; quip: string
 
   return (
     <>
-      <div className={classes}>
+      <div className={classes} data-seat={seat.seatIndex}>
         {seat.hasCards && (
           <div className="seat-cards">
             {seat.holeCards ? (
@@ -97,7 +91,7 @@ function Seat({ seat, slot, quip }: { seat: SeatView; slot: number; quip: string
           <span className="seat-info">
             <span className="seat-name">{seat.name}</span>
             <span className={`seat-stack${seat.allIn ? ' seat-stack--allin' : ''}`}>
-              {seat.allIn ? 'ALL-IN' : formatChips(seat.stack)}
+              {seat.eliminated ? 'OUT' : seat.allIn ? 'ALL-IN' : formatChips(seat.stack)}
             </span>
           </span>
         </div>
@@ -106,7 +100,7 @@ function Seat({ seat, slot, quip }: { seat: SeatView; slot: number; quip: string
 
       {(seat.streetBet > 0 || seat.isButton || seat.lastAction) && (
         <div className={`bet-spot bet-spot--pos${slot}`}>
-          {seat.isButton && <span className="dealer-button">D</span>}
+          {seat.isButton && <span className="dealer-button" title={seat.eliminated ? 'Dead button' : 'Dealer button'}>D</span>}
           {seat.lastAction && (
             <span className="bet-chip" key={`${seat.lastAction.type}-${seat.lastAction.amount}`}>
               <span className="bet-action">{actionLabel(seat)}</span>

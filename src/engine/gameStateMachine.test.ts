@@ -3,6 +3,7 @@ import type { Card, GameState, TableConfig } from './types';
 import { totalPot } from './types';
 import { applyAction, startHand, startHandWithDeck } from './gameStateMachine';
 import { legalActions } from './bettingRules';
+import { replayHand } from './replay';
 import { freshDeck } from './deck';
 import type { HandEvent } from './events';
 
@@ -86,6 +87,83 @@ describe('startHand basics', () => {
   });
 });
 
+describe('big blind ante', () => {
+  it('posts dead ante after the live blinds without changing legal bets', () => {
+    const { state, events } = startHand({ ...config([100, 100, 100]), bigBlindAnte: 10 }, 42);
+    expect(state.antePot).toBe(10);
+    expect(state.players[2]).toMatchObject({ stack: 80, streetBet: 10, totalCommitted: 10 });
+    expect(totalPot(state)).toBe(25);
+    expect(legalActions(state)).toMatchObject({ call: { amount: 10 }, raise: { minTo: 20, maxTo: 100 } });
+    expect(events.filter((e) => e.type === 'blindPosted' || e.type === 'antePosted')).toEqual([
+      { type: 'blindPosted', seatIndex: 1, kind: 'small', amount: 5, allIn: false },
+      { type: 'blindPosted', seatIndex: 2, kind: 'big', amount: 10, allIn: false },
+      { type: 'antePosted', seatIndex: 2, amount: 10, allIn: false },
+    ]);
+  });
+
+  it.each([[7, 0], [10, 0], [15, 5], [20, 10]])(
+    'with a BB stack of %i, pays the live blind before an ante of %i', (stack, ante) => {
+      const { state } = startHand({ ...config([100, 100, stack]), bigBlindAnte: 10 }, 42);
+      expect(state.antePot).toBe(ante);
+      expect(state.players[2]).toMatchObject({ stack: 0, streetBet: Math.min(stack, 10), allIn: true });
+      expect(state.actionOn).toBe(0);
+    },
+  );
+
+  it.each([-1, 0.5, NaN, Infinity])('rejects an invalid ante: %s', (bigBlindAnte) => {
+    expect(() => startHand({ ...config([100, 100, 100]), bigBlindAnte }, 42)).toThrow(/ante/i);
+  });
+
+  it('defaults to no ante', () => {
+    expect(startHand(config([100, 100, 100]), 42).state.antePot).toBe(0);
+  });
+
+  it('awards the ante on a fold-out while returning only unmatched live chips', () => {
+    let { state } = startHand({ ...config([100, 100, 100]), bigBlindAnte: 10 }, 42);
+    state = act(state, 'fold');
+    const ended = applyAction(state, { type: 'fold' });
+    expect(stacks(ended.state)).toEqual([100, 95, 105]);
+    expect(ended.events).toContainEqual({ type: 'uncalledBetReturned', seatIndex: 2, amount: 5 });
+    expect(ended.events.find((e) => e.type === 'potAwarded')).toMatchObject({ amount: 20 });
+  });
+
+  it('a forced-all-in BB can win the ante and main pot, but no side pot', () => {
+    const cfg = { ...config([100, 100, 15]), bigBlindAnte: 10 };
+    const deck = riggedDeck(0, [['Ks', 'Kd'], ['Qs', 'Qd'], ['As', 'Ad']], ['2c', '3h', '4s', '7d', '9c']);
+    let { state } = startHandWithDeck(cfg, deck);
+    state = act(state, 'raise', 100);
+    const ended = applyAction(state, { type: 'call' });
+    expect(stacks(ended.state)).toEqual([180, 0, 35]);
+    expect(ended.events.filter((e) => e.type === 'potAwarded').map((e) => e.amount)).toEqual([35, 180]);
+  });
+
+  it('a one-chip short stack can win the entire eight-chip ante', () => {
+    const cfg = { ...config([1, 100, 100]), smallBlind: 4, bigBlind: 8, bigBlindAnte: 8 };
+    const deck = riggedDeck(0, [['As', 'Ad'], ['Ks', 'Kd'], ['Qs', 'Qd']], ['2c', '3h', '4s', '7d', '9c']);
+    let { state } = startHandWithDeck(cfg, deck);
+    while (state.phase !== 'complete') state = act(state, legalActions(state)!.check ? 'check' : 'call');
+    expect(stacks(state)).toEqual([11, 106, 84]);
+  });
+
+  it('the BB forfeits its ante when folding', () => {
+    const cfg = { ...config([100, 100, 100]), bigBlindAnte: 10 };
+    let { state } = startHand(cfg, 42);
+    state = act(state, 'raise', 30);
+    state = act(state, 'call');
+    state = act(state, 'fold');
+    while (state.phase !== 'complete') state = act(state, 'check');
+    expect(state.players[2].stack).toBe(80);
+    expect(stacks(state).reduce((a, b) => a + b)).toBe(300);
+  });
+
+  it('runs out automatically when blinds and ante put both players all-in', () => {
+    const { state } = startHand({ ...config([5, 20]), bigBlindAnte: 10 }, 42);
+    expect(state.phase).toBe('complete');
+    expect(state.actionHistory).toEqual([]);
+    expect(stacks(state).reduce((a, b) => a + b)).toBe(25);
+  });
+});
+
 describe('fold-outs and uncalled bets', () => {
   it('folding around to the BB awards the blinds without showdown', () => {
     let { state } = startHand(config([1000, 1000, 1000]), 42);
@@ -163,11 +241,150 @@ describe('betting rules', () => {
     expect(la.raise).toEqual({ minTo: 170, maxTo: 1000 });
   });
 
+  it.each([49, 50, 55])('cumulative short all-ins to %i use the last full increment', (target) => {
+    let { state } = startHand(config([1000, 1000, 1000, 1000, 42, target]), 42);
+    state = act(state, 'raise', 30); // UTG: full increment 20
+    state = act(state, 'raise', 42); // HJ: short all-in
+    state = act(state, 'raise', target); // CO: another short all-in
+    state = act(state, 'call'); // button
+    state = act(state, 'fold'); // SB
+    state = act(state, 'fold'); // BB
+    expect(state.actionOn).toBe(3);
+    expect(state.lastRaiseAmount).toBe(20);
+    if (target < 50) {
+      expect(legalActions(state)!.raise).toBeUndefined();
+      expect(() => applyAction(state, { type: 'raise', amount: target + 20 })).toThrow();
+    } else {
+      expect(legalActions(state)!.raise).toEqual({ minTo: target + 20, maxTo: 1000 });
+      expect(() => applyAction(state, { type: 'raise', amount: target + 19 })).toThrow();
+      state = act(state, 'raise', target + 20);
+      expect(state.currentBet).toBe(target + 20);
+    }
+  });
+
+  it('re-opens for the original raiser but not a caller at the intervening short all-in', () => {
+    let { state } = startHand(config([55, 1000, 1000, 1000, 42, 1000]), 42);
+    state = act(state, 'raise', 30); // UTG
+    state = act(state, 'raise', 42); // HJ all-in
+    state = act(state, 'call'); // CO calls 42
+    state = act(state, 'raise', 55); // button all-in
+    state = act(state, 'fold'); // SB
+    state = act(state, 'fold'); // BB
+    expect(state.actionOn).toBe(3);
+    expect(legalActions(state)!.raise).toEqual({ minTo: 75, maxTo: 1000 });
+    state = act(state, 'call'); // UTG chooses to call
+    expect(state.actionOn).toBe(5);
+    expect(legalActions(state)!.call).toEqual({ amount: 13, allIn: false });
+    expect(legalActions(state)!.raise).toBeUndefined();
+    expect(() => applyAction(state, { type: 'raise', amount: 75 })).toThrow();
+  });
+
+  it.each([61, 62])('measures cumulative reopening from a caller\'s last call at 42 (to %i)', (target) => {
+    let { state } = startHand(config([55, target, 1000, 1000, 42, 1000]), 42);
+    state = act(state, 'raise', 30); // UTG
+    state = act(state, 'raise', 42); // HJ all-in
+    state = act(state, 'call'); // CO calls 42, establishing its own reopening level
+    state = act(state, 'raise', 55); // button all-in
+    state = act(state, 'raise', target); // SB all-in
+    state = act(state, 'fold'); // BB
+    state = act(state, 'call'); // UTG
+    expect(state.actionOn).toBe(5);
+    expect(state.players[5].streetBet).toBe(42);
+    expect(state.lastRaiseAmount).toBe(20);
+    expect(legalActions(state)!.raise).toEqual(
+      target === 62 ? { minTo: 82, maxTo: 1000 } : undefined,
+    );
+  });
+
   it('cannot check facing a bet, cannot raise beyond stack', () => {
     let { state } = startHand(config([1000, 1000, 1000]), 42);
     state = act(state, 'raise', 30);
     expect(() => applyAction(state, { type: 'check' })).toThrow();
     expect(() => applyAction(state, { type: 'raise', amount: 1500 })).toThrow();
+  });
+});
+
+describe('betting against all-in opponents', () => {
+  it.each([4, 5])('runs out when the SB already covers the short BB of %i', (bbStack) => {
+    let { state } = startHand(config([1000, 1000, bbStack]), 42);
+    const result = applyAction(state, { type: 'fold' }); // button leaves SB vs all-in BB
+    state = result.state;
+    expect(state.phase).toBe('complete');
+    expect(state.actionOn).toBeNull();
+    expect(state.board).toHaveLength(5);
+    expect(legalActions(state)).toBeNull();
+    expect(stacks(state).reduce((sum, stack) => sum + stack)).toBe(2000 + bbStack);
+    if (bbStack === 4) {
+      expect(result.events).toContainEqual({ type: 'uncalledBetReturned', seatIndex: 1, amount: 1 });
+    }
+  });
+
+  it.each([2, 3])('asks the SB to call only the real short BB with %i players', (count) => {
+    let { state } = startHand(config(count === 2 ? [1000, 7] : [1000, 1000, 7]), 42);
+    if (count === 3) state = act(state, 'fold');
+    expect(legalActions(state)!.call).toEqual({ amount: 2, allIn: false });
+    expect(legalActions(state)!.raise).toBeUndefined();
+    expect(() => applyAction(state, { type: 'raise', amount: 20 })).toThrow();
+    const result = applyAction(state, { type: 'call' });
+    expect(result.state.phase).toBe('complete');
+    expect(result.events).toContainEqual({
+      type: 'actionTaken', seatIndex: count === 2 ? 0 : 1,
+      action: 'call', amount: 2, toStreetBet: 7, allIn: false,
+    });
+    expect(stacks(result.state).reduce((sum, stack) => sum + stack)).toBe((count - 1) * 1000 + 7);
+    const { steps } = replayHand({
+      handId: result.state.handId,
+      config: result.state.config,
+      seed: result.state.seed,
+      actions: result.state.actionHistory,
+    });
+    const replayed = steps[steps.length - 1];
+    expect(replayed.state).toEqual(result.state);
+    expect(replayed.events).toEqual(result.events);
+  });
+
+  it('still lets the sole live player fold when an all-in bet is unmatched', () => {
+    let { state } = startHand(config([1000, 7]), 42);
+    expect(legalActions(state)!.fold).toBe(true);
+    state = act(state, 'fold');
+    expect(state.phase).toBe('complete');
+    expect(stacks(state)).toEqual([995, 12]);
+  });
+
+  it('runs out immediately when a heads-up short SB is covered by the BB', () => {
+    const { state, events } = startHand(config([4, 1000]), 42);
+    expect(state.phase).toBe('complete');
+    expect(state.board).toHaveLength(5);
+    expect(events).toContainEqual({ type: 'uncalledBetReturned', seatIndex: 1, amount: 6 });
+    expect(stacks(state).reduce((sum, stack) => sum + stack)).toBe(1004);
+  });
+
+  it.each([4, 7])('keeps the nominal BB of 10 while two players can bet (short BB %i)', (bbStack) => {
+    let { state } = startHand(config([1000, 1000, bbStack]), 42);
+    expect(state.currentBet).toBe(10);
+    expect(legalActions(state)!.call).toEqual({ amount: 10, allIn: false });
+    expect(legalActions(state)!.raise).toEqual({ minTo: 20, maxTo: 1000 });
+    state = act(state, 'call'); // button must match the nominal BB
+    expect(legalActions(state)!.call).toEqual({ amount: 5, allIn: false });
+    expect(legalActions(state)!.raise).toEqual({ minTo: 20, maxTo: 1000 });
+    const result = applyAction(state, { type: 'fold' }); // SB's chips remain in the pot
+    expect(result.state.phase).toBe('complete');
+    expect(result.events).toContainEqual({ type: 'uncalledBetReturned', seatIndex: 0, amount: 10 - Math.max(5, bbStack) });
+    expect(result.events.filter((event) => event.type === 'potAwarded').reduce((sum, event) => sum + event.amount, 0))
+      .toBe(5 + bbStack + Math.max(5, bbStack));
+    expect(stacks(result.state).reduce((sum, stack) => sum + stack)).toBe(2000 + bbStack);
+  });
+
+  it('uses the largest real commitment among several all-in opponents', () => {
+    let { state } = startHand(config([1000, 1000, 7, 6]), 42);
+    state = act(state, 'call'); // UTG all-in for 6
+    state = act(state, 'fold'); // button
+    expect(state.actionOn).toBe(1);
+    expect(legalActions(state)!.call).toEqual({ amount: 2, allIn: false });
+    expect(legalActions(state)!.raise).toBeUndefined();
+    state = act(state, 'call');
+    expect(state.phase).toBe('complete');
+    expect(stacks(state).reduce((sum, stack) => sum + stack)).toBe(2013);
   });
 });
 
