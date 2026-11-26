@@ -7,6 +7,10 @@ interface EquityRequest {
 
 self.onmessage = (e: MessageEvent<EquityRequest>) => {
   const { requestId, opts } = e.data;
-  const result = monteCarloEquity(opts);
-  self.postMessage({ requestId, result });
+  try {
+    const result = monteCarloEquity(opts);
+    self.postMessage({ requestId, result });
+  } catch (error) {
+    self.postMessage({ requestId, error: error instanceof Error ? error.message : String(error) });
+  }
 };

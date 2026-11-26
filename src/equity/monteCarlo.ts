@@ -1,5 +1,6 @@
 import { cardCodes, evaluateCardCodes } from 'phe';
 import type { Card } from '../engine/types';
+import { parseRange, validateCards } from './ranges';
 import { freshDeck } from '../engine/deck';
 import { mulberry32, randInt, randomSeed } from '../engine/rng';
 
@@ -19,12 +20,16 @@ export interface EquityOptions {
   opponents: number;
   /** Opponents with known hands (drills, tests, modeled reads). */
   knownOpponents?: [Card, Card][];
+  /** Additional opponents, each uniform over the concrete combos of their range. */
+  opponentRanges?: string[];
   iterations: number;
   /** Fixed seed for reproducible results (tests). */
   seed?: number;
 }
 
 export interface EquityResult {
+  /** Always completed through the river; this is showdown equity, not one-card outs or action EV. */
+  horizon?: 'showdown';
   /** Hero's expected share of the pot, 0..1 (ties split fractionally). */
   equity: number;
   /** Fraction of iterations hero wins outright. */
@@ -42,18 +47,26 @@ export interface EquityResult {
  */
 export function monteCarloEquity(opts: EquityOptions): EquityResult {
   const { hero, board, opponents, knownOpponents = [], iterations } = opts;
-  if (board.length > 5) throw new Error('board cannot exceed 5 cards');
+  if (![0, 3, 4, 5].includes(board.length)) throw new Error('Invalid board length');
+  if (hero.length !== 2 || knownOpponents.some(h => h.length !== 2)) throw new Error('Hands need two cards');
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > 1_000_000) throw new Error('iterations must be 1..1000000');
+  if (!Number.isInteger(opponents) || opponents < 0 || opponents > 22) throw new Error('Invalid opponent count');
+  if (opts.seed !== undefined && !Number.isSafeInteger(opts.seed)) throw new Error('Invalid seed');
+  validateCards([...hero, ...board, ...knownOpponents.flat()]);
   const rng = mulberry32(opts.seed ?? randomSeed());
 
   const known = new Set<Card>([...hero, ...board, ...knownOpponents.flat()]);
-  const pool = freshDeck().filter((c) => !known.has(c)).map((c) => CODE.get(c)!);
+  const ranges = (opts.opponentRanges ?? []).map(r => parseRange(r, [...known]).map(h => h.map(c => CODE.get(c)!) as [number, number]));
+  if (opponents + knownOpponents.length + ranges.length > 22) throw new Error('Too many opponents');
+  const basePool = freshDeck().filter((c) => !known.has(c)).map((c) => CODE.get(c)!);
+  let pool = basePool.slice();
   const heroCodes = hero.map((c) => CODE.get(c)!);
   const boardCodes = board.map((c) => CODE.get(c)!);
   const knownOppCodes = knownOpponents.map((h) => [CODE.get(h[0])!, CODE.get(h[1])!]);
 
   const boardNeed = 5 - board.length;
   const draw = boardNeed + opponents * 2;
-  if (draw > pool.length) throw new Error('not enough cards to simulate');
+  if (draw + ranges.length * 2 > pool.length) throw new Error('not enough cards to simulate');
 
   const heroSeven = new Array<number>(7);
   heroSeven[0] = heroCodes[0];
@@ -64,7 +77,20 @@ export function monteCarloEquity(opts: EquityOptions): EquityResult {
   let wins = 0;
   let ties = 0;
 
+  // Reject the whole independent joint draw: filtering later ranges would bias earlier hands.
+  let attempts = 0;
+  const maxAttempts = Math.min(10_000_000, Math.max(10_000, iterations * 100));
   for (let it = 0; it < iterations; it++) {
+    let rangeHands: [number, number][] = [];
+    if (ranges.length) {
+      let used: Set<number>;
+      do {
+        if (++attempts > maxAttempts) throw new Error('Joint range sampling budget exhausted; no uniform estimate available');
+        rangeHands = ranges.map(r => r[randInt(rng, r.length)]);
+        used = new Set(rangeHands.flat());
+      } while (used.size !== ranges.length * 2);
+      pool = basePool.filter(c => !used.has(c));
+    }
     // partial Fisher–Yates: uniformly draw `draw` cards from the pool
     for (let i = 0; i < draw; i++) {
       const j = i + randInt(rng, pool.length - i);
@@ -96,6 +122,7 @@ export function monteCarloEquity(opts: EquityOptions): EquityResult {
     for (let o = 0; o < opponents; o++) {
       evalOpp(pool[boardNeed + 2 * o], pool[boardNeed + 2 * o + 1]);
     }
+    for (const [c1, c2] of rangeHands) evalOpp(c1, c2);
     for (const [c1, c2] of knownOppCodes) evalOpp(c1, c2);
 
     if (heroVal < bestOpp) {
@@ -108,6 +135,7 @@ export function monteCarloEquity(opts: EquityOptions): EquityResult {
   }
 
   return {
+    horizon: 'showdown',
     equity: winShare / iterations,
     win: wins / iterations,
     tie: ties / iterations,

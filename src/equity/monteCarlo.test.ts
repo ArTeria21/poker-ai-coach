@@ -60,3 +60,69 @@ describe('monteCarloEquity vs known values', () => {
     expect(ms).toBeLessThan(100);
   });
 });
+
+describe('range equity and validation', () => {
+  const base = { hero: ['2c', '3d'] as [string, string], board: ['As', 'Ks', 'Qs', 'Js', 'Ts'], opponents: 0, iterations: 100, seed: 7 };
+  it('splits board ties among known, ranged and unknown opponents', () => {
+    expect(monteCarloEquity({ ...base, knownOpponents: [['4c', '5d']], opponentRanges: ['66'], opponents: 1 }).equity).toBe(0.25);
+  });
+  it('rejects invalid inputs and impossible joint ranges', () => {
+    for (const opts of [
+      { iterations: 0 }, { iterations: 1.5 }, { iterations: 1_000_001 }, { opponents: -1 },
+      { board: ['As'] }, { hero: ['As', 'As'] }, { hero: ['XX', '3d'] },
+      { knownOpponents: [['As', '4h']] }, { opponentRanges: ['AA', 'AA', 'AA'] },
+    ]) expect(() => monteCarloEquity({ ...base, ...opts } as Parameters<typeof monteCarloEquity>[0])).toThrow();
+  });
+});
+
+it('matches exhaustive joint range equity rather than sequentially filtered range sampling', async () => {
+  const { parseRange } = await import('./ranges');
+  const { cardCodes, evaluateCardCodes } = await import('phe');
+  const hero: [string, string] = ['Kh', 'Kd'];
+  const board = ['2c', '5d', '8h', 'Js', 'Qc'];
+  const ranges = ['AcAd,6c7c', 'AcAh,AdAs,3c4c'];
+  let sum = 0, count = 0;
+  for (const a of parseRange(ranges[0])) for (const b of parseRange(ranges[1])) {
+    if (new Set([...a, ...b]).size !== 4) continue;
+    const ranks = [hero, a, b].map(h => evaluateCardCodes(cardCodes([...h, ...board])));
+    const best = Math.min(...ranks);
+    sum += ranks[0] === best ? 1 / ranks.filter(r => r === best).length : 0;
+    count++;
+  }
+  // AA can coexist with only one second-opponent combo; 67 can coexist with all three.
+  expect(count).toBe(4);
+  const opts = { hero, board, opponents: 0, opponentRanges: ranges, iterations: 20_000, seed: 55 };
+  const actual = monteCarloEquity(opts);
+  expect(actual.equity).toBeCloseTo(sum / count, 2);
+  expect(monteCarloEquity(opts)).toEqual(actual);
+});
+
+it('matches exhaustive one-card completions with a fixed opponent', async () => {
+  const { freshDeck } = await import('../engine/deck');
+  const { cardCodes, evaluateCardCodes } = await import('phe');
+  const hero: [string, string] = ['Ah', '9h'];
+  const villain: [string, string] = ['Kc', 'Kd'];
+  const board = ['Kh', '7h', '2c', '3s'];
+  const known = [...hero, ...villain, ...board];
+  let sum = 0, count = 0;
+  for (const river of freshDeck().filter(c => !known.includes(c))) {
+    const h = evaluateCardCodes(cardCodes([...hero, ...board, river]));
+    const v = evaluateCardCodes(cardCodes([...villain, ...board, river]));
+    sum += h < v ? 1 : h === v ? 0.5 : 0;
+    count++;
+  }
+  const opts = { hero, board, opponents: 0, opponentRanges: ['KcKd'], iterations: 20_000, seed: 42 };
+  expect(monteCarloEquity(opts).equity).toBeCloseTo(sum / count, 2);
+  expect(monteCarloEquity({ ...opts, opponentRanges: undefined, knownOpponents: [villain] }).equity).toBeCloseTo(sum / count, 2);
+});
+
+it('does not mutate caller cards or ranges, and applies known-hand blockers', () => {
+  const opts = {
+    hero: ['Kh', 'Kd'] as [string, string], board: ['2c', '5d', '8h', 'Js', 'Qc'],
+    knownOpponents: [['Ac', 'Ad']] as [string, string][], opponentRanges: ['AcAh,6c7c'],
+    opponents: 0, iterations: 200, seed: 12,
+  };
+  const before = structuredClone(opts);
+  expect(monteCarloEquity(opts).equity).toBe(0);
+  expect(opts).toEqual(before);
+});
