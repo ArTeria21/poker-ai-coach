@@ -1,5 +1,5 @@
 import type { Card, GameState, PlayerAction, PlayerState, TableConfig } from './types';
-import { firstToReceive } from './types';
+import { firstToReceive, totalPot } from './types';
 import type { HandEvent } from './events';
 import { shuffledDeck } from './deck';
 import { legalActions } from './bettingRules';
@@ -96,7 +96,7 @@ export function startHandWithDeck(
   }));
 
   const state: GameState = {
-    handId: handId ?? `hand-${seed.toString(36)}`,
+    handId: handId ?? 'hand',
     config,
     seed,
     deck,
@@ -217,7 +217,13 @@ export function applyAction(prev: GameState, action: PlayerAction): EngineResult
       throw new EngineError(`Unknown action type ${(action as PlayerAction).type}`);
   }
 
-  state.actionHistory.push({ type: action.type, ...(action.amount != null ? { amount: action.amount } : {}) });
+  const before = prev.players[la.seatIndex];
+  state.actionHistory.push({
+    type: action.type, ...(action.amount != null ? { amount: action.amount } : {}),
+    seatIndex: p.seatIndex, street: prev.phase as Exclude<GameState['phase'], 'complete'>,
+    amountAdded: before.stack - p.stack, toStreetBet: p.streetBet,
+    potBefore: totalPot(prev), toCallBefore: la.call?.amount ?? 0, stackBefore: before.stack,
+  });
 
   // The hand ends the instant only one player remains — nobody else gets a
   // turn (otherwise the last player could "fold" and orphan the pot).
@@ -407,7 +413,7 @@ function cloneState(s: GameState): GameState {
     ...s,
     board: [...s.board],
     players: s.players.map((p) => ({ ...p })),
-    actionHistory: [...s.actionHistory],
+    actionHistory: s.actionHistory.map(action => ({ ...action })),
     // deck and config are never mutated after startHand — safe to share.
   };
 }

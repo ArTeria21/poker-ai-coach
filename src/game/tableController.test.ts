@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TableController } from './tableController';
 import { useGameStore } from '../store/gameStore';
 import { useSettingsStore } from '../store/settingsStore';
+import * as botModule from '../bots/botDecision';
+import { gradeHandFromSteps } from '../analysis/gradeHand';
+import { applyAction } from '../engine/gameStateMachine';
 import { decideAction } from '../bots/botDecision';
 
 vi.mock('./sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
@@ -46,6 +49,40 @@ afterEach(() => {
 });
 
 describe('SNG table controller', () => {
+  it('publishes the same pre-action grade as batch, preserves it through bot responses, and clears on a new hand', async () => {
+    const spy=vi.spyOn(botModule,'buildBotView');
+    controller.startSession();
+    await advanceUntil(()=>store().heroLegal!==null);
+    expect(store().latestDecisionGrade).toBeNull();
+    const action={type:store().heroLegal!.check?'check' as const:'call' as const};
+    controller.humanAct(action);
+    const before=spy.mock.calls.at(-1)![0];
+    const seatIndex=before.actionOn!;
+    const result=applyAction(before,action);
+    const batch=gradeHandFromSteps(before.handId,[{state:before,events:[]},{...result,action,seatIndex}],seatIndex).decisions[0];
+    await Promise.resolve();
+    expect(store().latestDecisionGrade).toEqual(batch);
+    expect(JSON.stringify(store().latestDecisionGrade)).not.toMatch(/opponentRanges|weightedCombos|"seed"|"deck"/);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store().latestDecisionGrade).toEqual(batch);
+    await finishHand();
+    expect(store().latestDecisionGrade).not.toBeNull();
+    controller.continueNextHand();await Promise.resolve();
+    expect(store().latestDecisionGrade).toBeNull();
+  });
+
+  it('cannot publish a stale accepted grade after an immediate restart or rejected action', async () => {
+    controller.startSession();await advanceUntil(()=>store().heroLegal!==null);
+    controller.humanAct({type:'raise',amount:NaN});
+    expect(store().latestDecisionGrade).toBeNull();
+    controller.humanAct({type:store().heroLegal!.check?'check':'call'});
+    controller.startSession('Restarted');
+    await advanceUntil(()=>store().heroLegal!==null);
+    expect(store().latestDecisionGrade).toBeNull();
+    await vi.runAllTimersAsync();
+    expect(store().latestDecisionGrade).toBeNull();
+  });
+
   it('publishes six fixed seats, real blinds, and sanitized cards', async () => {
     controller.startSession();
     await advanceUntil(() => store().heroLegal !== null);

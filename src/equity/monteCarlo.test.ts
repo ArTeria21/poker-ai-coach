@@ -126,3 +126,61 @@ it('does not mutate caller cards or ranges, and applies known-hand blockers', ()
   expect(monteCarloEquity(opts).equity).toBe(0);
   expect(opts).toEqual(before);
 });
+it('samples weighted joint ranges conditioned on collisions and applies blockers', () => {
+  const opts = {
+    hero: ['Kh','Kd'] as [string,string], board: ['2c','5d','8h','Js','Qc'], opponents: 0, iterations: 30_000, seed: 55,
+    opponentRanges: [
+      [{cards: ['Ac','Ad'] as [string,string], weight: 2}, {cards: ['6c','7c'] as [string,string], weight: 1}],
+      [{cards: ['Ac','Ah'] as [string,string], weight: 3}, {cards: ['Ad','As'] as [string,string], weight: 1}, {cards: ['3c','4c'] as [string,string], weight: 2}],
+    ],
+  };
+  // Valid joints weigh 4 (AA/34), 3 (67/AA), 1 (67/AA), 2 (67/34): hero wins only the last.
+  expect(monteCarloEquity(opts).equity).toBeCloseTo(2/10, 2);
+  const blocked = { ...opts, opponentRanges: [[{cards: ['Kh','Ah'] as [string,string],weight:100}, {cards: ['Ac','Ad'] as [string,string],weight:1}]] };
+  expect(monteCarloEquity(blocked).equity).toBe(0);
+});
+it('rejects malformed, duplicate, nonfinite and empty weighted combos', () => {
+  const base = {hero:['Kh','Kd'] as [string,string],board:[],opponents:0,iterations:1};
+  for (const range of [
+    [{cards:['Ac','Ad'],weight:-1}], [{cards:['Ac','Ad'],weight:NaN}], [{cards:['Ac','Ad'],weight:Infinity}],
+    [{cards:['Ac','Ad'],weight:0}], [{cards:['Ac','Ac'],weight:1}], [{cards:['XX','Ac'],weight:1}],
+    [{cards:['Kh','Ad'],weight:1}], [{cards:['Ac','Ad'],weight:1},{cards:['Ad','Ac'],weight:2}], [],
+  ]) expect(() => monteCarloEquity({...base,opponentRanges:[range]} as unknown as Parameters<typeof monteCarloEquity>[0])).toThrow();
+});
+it('preserves weighted joint distribution under seat permutation and range weight scaling', () => {
+  const a = [{cards:['Ac','Ad'] as [string,string],weight:1},{cards:['6c','7c'] as [string,string],weight:3}];
+  const b = [{cards:['Ac','Ah'] as [string,string],weight:2},{cards:['3c','4c'] as [string,string],weight:1}];
+  const opts={hero:['Kh','Kd'] as [string,string],board:['2c','5d','8h','Js','Qc'],opponents:0,iterations:30_000,seed:80};
+  for(const opponentRanges of [[a,b],[b,a],[a.map(c=>({...c,weight:c.weight*1e300})),b]]) {
+    expect(monteCarloEquity({...opts,opponentRanges}).equity).toBeCloseTo(0.3,2);
+  }
+});
+it('awards side pots independently of whole-field showdown equity', () => {
+  const base={hero:['Kh','Kd'] as [string,string],board:['2c','5d','8h','Js','9c'],opponents:0,knownOpponents:[['Ac','Ad'],['Qs','Qd']] as [string,string][],iterations:10,seed:1,oddChipOrder:[0,1,2]};
+  const deep=monteCarloEquity({...base,pots:[{amount:180,eligible:[0,1,2]},{amount:300,eligible:[0,2]}]});
+  expect(deep.equity).toBe(0); expect(deep.expectedAward).toBe(300); expect(deep.awardStandardError).toBe(0);
+  const short=monteCarloEquity({...base,hero:['Ac','Ad'],knownOpponents:[['Kh','Kd'],['Qs','Qd']],pots:[{amount:180,eligible:[0,1,2]},{amount:300,eligible:[1,2]}]});
+  expect(short.expectedAward).toBe(180);
+});
+it('allocates odd chips by the supplied clockwise order', () => {
+  const base={hero:['2c','3d'] as [string,string],board:['As','Ks','Qs','Js','Ts'],opponents:0,knownOpponents:[['4c','5d']] as [string,string][],iterations:1,pots:[{amount:5,eligible:[0,1]}]};
+  expect(monteCarloEquity({...base,oddChipOrder:[0,1]}).expectedAward).toBe(3);
+  expect(monteCarloEquity({...base,oddChipOrder:[1,0]}).expectedAward).toBe(2);
+});
+it('uses every opponent blocker for side pot runouts', () => {
+  const result=monteCarloEquity({hero:['Ah','Kh'],board:['Jh','Th','4c','5d'],opponents:0,knownOpponents:[['2h','3h'],['As','Ad']],iterations:30_000,seed:12,pots:[{amount:1,eligible:[1]},{amount:42,eligible:[0,2]}],oddChipOrder:[0,1,2]});
+  expect(result.expectedAward).toBeCloseTo(10,0);
+});
+it('validates pot participants, safe amounts and odd-chip permutations', () => {
+  const base={hero:['As','Ah'] as [string,string],board:[],opponents:1,iterations:1};
+  for (const extra of [
+    {pots:[{amount:-1,eligible:[0,1]}],oddChipOrder:[0,1]},
+    {pots:[{amount:1.5,eligible:[0,1]}],oddChipOrder:[0,1]},
+    {pots:[{amount:1,eligible:[] }],oddChipOrder:[0,1]},
+    {pots:[{amount:1,eligible:[0,0]}],oddChipOrder:[0,1]},
+    {pots:[{amount:1,eligible:[0,2]}],oddChipOrder:[0,1]},
+    {pots:[{amount:1,eligible:[0,1]}],oddChipOrder:[0,0]},
+    {pots:[{amount:1,eligible:[0,1]}]},
+    {pots:[{amount:Number.MAX_SAFE_INTEGER,eligible:[0,1]},{amount:1,eligible:[0,1]}],oddChipOrder:[0,1]},
+  ]) expect(()=>monteCarloEquity({...base,...extra})).toThrow();
+});

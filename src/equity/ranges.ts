@@ -57,3 +57,28 @@ export function parseRange(range: string, blockers: Card[] = []): [Card, Card][]
   if (!combos.size) throw new Error('Range has no unblocked combos');
   return [...combos.values()];
 }
+
+export interface WeightedCombo { cards: [Card, Card]; weight: number }
+export type OpponentRange = string | WeightedCombo[];
+
+/** Explicit combo weights; duplicate unordered hands are rejected rather than silently changing their likelihood. */
+export function concreteRange(range: OpponentRange, blockers: Card[]): WeightedCombo[] {
+  if (typeof range === 'string') return parseRange(range, blockers).map(cards => ({ cards, weight: 1 }));
+  validateCards(blockers);
+  if (!Array.isArray(range)) throw new Error('Invalid weighted range');
+  const seen = new Set<string>();
+  const result: WeightedCombo[] = [];
+  for (const combo of range) {
+    if (!combo || !Array.isArray(combo.cards) || combo.cards.length !== 2) throw new Error('Combo needs two cards');
+    validateCards(combo.cards);
+    if (!Number.isFinite(combo.weight) || combo.weight < 0) throw new Error('Combo weight must be finite and nonnegative');
+    const [a, b] = combo.cards;
+    const cards: [Card, Card] = a < b ? [a,b] : [b,a];
+    const key = cards.join('');
+    if (seen.has(key)) throw new Error('Duplicate weighted combo');
+    seen.add(key);
+    if (combo.weight > 0 && !cards.some(c => blockers.includes(c))) result.push({ cards, weight: combo.weight });
+  }
+  if (!result.length) throw new Error('Range has no positive unblocked combos');
+  return result;
+}

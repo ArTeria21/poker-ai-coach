@@ -1,3 +1,4 @@
+import type { DecisionGrade } from '../analysis/gradeHand';
 import { create } from 'zustand';
 import type { ActionType, Card, GamePhase, LegalActions } from '../engine/types';
 import type { TournamentState } from '../game/tournament';
@@ -46,6 +47,8 @@ export interface GameViewState {
   currentBet: number;
   /** Non-null exactly when the UI should show the action bar. */
   heroLegal: LegalActions | null;
+  /** Latest accepted hero decision; compact public math/model evidence, no hidden hands or range arrays. */
+  latestDecisionGrade: DecisionGrade | null;
   /** True while the game is paused waiting for "deal next hand". */
   awaitingNext: boolean;
   /** One-liner banner at hand end, e.g. "Selena wins 300 with a flush". */
@@ -67,6 +70,7 @@ const initialState: GameViewState = {
   bigBlind: 20,
   currentBet: 0,
   heroLegal: null,
+  latestDecisionGrade: null,
   awaitingNext: false,
   banner: null,
   log: [],

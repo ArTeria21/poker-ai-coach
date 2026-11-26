@@ -1,3 +1,4 @@
+import { gradeDecision, type DecisionGrade } from '../analysis/gradeHand';
 import type { GameState, PlayerAction } from '../engine/types';
 import { totalPot } from '../engine/types';
 import type { HandEvent } from '../engine/events';
@@ -19,6 +20,7 @@ const DEFAULT_BOTS = ['shark', 'rock', 'maniac', 'fish', 'nit'];
 export class TableController {
   private tournament: TournamentState | null = null;
   private state: GameState | null = null;
+  private latestDecisionGrade: DecisionGrade | null = null;
   private handNumber = 0;
   private botRng: Rng = mulberry32(randomSeed());
   private pendingHuman: ((a: PlayerAction | null) => void) | null = null;
@@ -71,7 +73,7 @@ export class TableController {
     const resolve = this.pendingHuman;
     if (!resolve || !this.state) return;
     const la = legalActions(this.state);
-    if (!la) return;
+    if (!la || !['fold','check','call','raise'].includes(action.type)) return;
     if (action.type === 'fold' && !la.fold) return;
     if (action.type === 'check' && !la.check) return;
     if (action.type === 'call' && !la.call) return;
@@ -79,6 +81,7 @@ export class TableController {
       if (!la.raise || action.amount == null || !Number.isFinite(action.amount)) return;
       action = { type: 'raise', amount: Math.max(la.raise.minTo, Math.min(la.raise.maxTo, Math.round(action.amount))) };
     }
+    this.latestDecisionGrade = gradeDecision(buildBotView(this.state, la.seatIndex), action);
     this.pendingHuman = null;
     resolve(action);
   }
@@ -102,6 +105,7 @@ export class TableController {
     const begun = beginTournamentHand(this.tournament!);
     this.tournament = begun.tournament;
     this.handNumber = this.tournament.completedHands + 1;
+    this.latestDecisionGrade = null;
     this.lastActions.clear();
     this.reveals.clear();
     this.winners.clear();
@@ -326,6 +330,7 @@ export class TableController {
     const complete = tournament.players.filter((p) => p.stack > 0).length === 1 && tournament.pendingHandId === null;
     useGameStore.getState().publish({
       tournament,
+      latestDecisionGrade: this.latestDecisionGrade,
       handNumber: this.handNumber,
       phase: st.phase,
       seats,

@@ -78,6 +78,17 @@ export interface LegalActions {
   raise?: { minTo: number; maxTo: number };
 }
 
+/** Public, pre-action context; structural PlayerAction compatibility keeps seed/action replay unchanged. */
+export interface PublicAction extends PlayerAction {
+  seatIndex: number;
+  street: Street;
+  amountAdded: number;
+  toStreetBet: number;
+  potBefore: number;
+  toCallBefore: number;
+  stackBefore: number;
+}
+
 export interface GameState {
   handId: string;
   config: TableConfig;
@@ -106,7 +117,7 @@ export interface GameState {
    */
   lastAggressor: number | null;
   /** Ordered actions applied so far — replaying these on {config, seed} rebuilds any state. */
-  actionHistory: PlayerAction[];
+  actionHistory: PublicAction[];
 }
 
 /** Sum of all chips committed to the pot this hand. */

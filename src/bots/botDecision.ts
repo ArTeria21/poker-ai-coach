@@ -1,9 +1,11 @@
-import type { Card, GameState, LegalActions, PlayerAction, Position, Street } from '../engine/types';
-import { positionOfSeat, totalPot } from '../engine/types';
+import type { Card, GameState, LegalActions, PlayerAction, Position, Street, PublicAction } from '../engine/types';
+import { positionOfSeat, totalPot, firstToReceive } from '../engine/types';
 import { legalActions } from '../engine/bettingRules';
 import type { Rng } from '../engine/rng';
 import { handTier, handLabel } from './preflopTiers';
 import { postflopStrength } from './handStrength';
+import { decisionFacts, decisionEquity } from '../equity/decisionEquity';
+import { RangeSamplingError } from '../equity/monteCarlo';
 import { DIFFICULTY_NOISE, type Difficulty, type Personality } from './personalities';
 
 /**
@@ -11,7 +13,26 @@ import { DIFFICULTY_NOISE, type Difficulty, type Personality } from './personali
  * game state by buildBotView — bots never see the GameState itself, so hole
  * card leakage is impossible by construction.
  */
+export interface PublicPlayer {
+  id: string;
+  seatIndex: number;
+  position: Position;
+  stack: number;
+  streetBet: number;
+  totalCommitted: number;
+  folded: boolean;
+  allIn: boolean;
+  hasActed: boolean;
+  personalityId?: string;
+}
+
 export interface BotView {
+  handId: string;
+  decisionIndex: number;
+  buttonIndex: number | null;
+  firstToReceiveSeat: number;
+  publicPlayers: PublicPlayer[];
+  publicHistory: PublicAction[];
   seatIndex: number;
   holeCards: [Card, Card];
   board: Card[];
@@ -28,7 +49,7 @@ export interface BotView {
   bigBlind: number;
   legal: LegalActions;
   numActive: number;
-  /** True when this seat made the last bet/raise of the hand (initiative). */
+  /** True when this seat made the final preflop raise (continuation-bet initiative). */
   iAmLastAggressor?: boolean;
 }
 
@@ -48,7 +69,18 @@ export function buildBotView(state: GameState, seatIndex: number): BotView {
   if (state.phase === 'complete') throw new Error('hand is complete');
   return {
     seatIndex,
-    holeCards: p.holeCards,
+    handId: state.handId,
+    decisionIndex: state.actionHistory.length,
+    buttonIndex: state.buttonIndex,
+    firstToReceiveSeat: firstToReceive(state.players.length, state.smallBlindIndex, state.bigBlindIndex),
+    publicPlayers: state.players.map(q => ({
+      id: q.id, seatIndex: q.seatIndex, position: positionOfSeat(state, q.seatIndex),
+      stack: q.stack, streetBet: q.streetBet, totalCommitted: q.totalCommitted,
+      folded: q.folded, allIn: q.allIn, hasActed: q.hasActed,
+      personalityId: state.config.seats[q.seatIndex].personalityId,
+    })),
+    publicHistory: state.actionHistory.map(action => ({ ...action })),
+    holeCards: [...p.holeCards],
     board: [...state.board],
     phase: state.phase,
     position: positionOfSeat(state, seatIndex),
@@ -61,7 +93,7 @@ export function buildBotView(state: GameState, seatIndex: number): BotView {
     bigBlind: state.config.bigBlind,
     legal: la,
     numActive: state.players.filter((q) => !q.folded).length,
-    iAmLastAggressor: state.lastAggressor === seatIndex,
+    iAmLastAggressor: state.actionHistory.filter(a => a.street === 'preflop' && a.type === 'raise').at(-1)?.seatIndex === seatIndex,
   };
 }
 
@@ -72,9 +104,22 @@ export function decideAction(
   rng: Rng,
 ): BotDecision {
   const trace: string[] = [];
-  const raw = view.phase === 'preflop'
-    ? decidePreflop(view, personality, difficulty, rng, trace)
-    : decidePostflop(view, personality, difficulty, rng, trace);
+  let equity: ReturnType<typeof decisionEquity> | undefined;
+  if (difficulty === 'hard' && view.toCall > 0 && (view.phase !== 'preflop' || view.currentBet > view.bigBlind)) {
+    try {
+      equity = decisionEquity(view, { iterations: 1000, seed: Math.floor(rng() * 4294967296) });
+      trace.push(`range MC: ${(equity.equity * 100).toFixed(1)}% showdown share; ${equity.model} call chip EV ${equity.conditionalChipEV.toFixed(1)}`);
+    } catch (error) {
+      if (!(error instanceof RangeSamplingError)) throw error;
+      trace.push('Range sampling budget exhausted: using the hand-strength heuristic fallback.');
+    }
+  }
+  const facts = decisionFacts(view);
+  const raw = view.phase === 'preflop' && facts.effectiveDepthBB <= 10
+    ? decideShortStack(view, personality, facts.effectiveDepthBB, equity, trace)
+    : view.phase === 'preflop'
+      ? decidePreflop(view, personality, difficulty, rng, trace, equity)
+      : decidePostflop(view, personality, difficulty, rng, trace, equity);
   return { action: ensureLegal(raw, view, trace), trace };
 }
 
@@ -86,6 +131,7 @@ function decidePreflop(
   difficulty: Difficulty,
   rng: Rng,
   trace: string[],
+  equity?: ReturnType<typeof decisionEquity>,
 ): PlayerAction {
   const tier = handTier(view.holeCards);
   const label = handLabel(view.holeCards);
@@ -128,6 +174,7 @@ function decidePreflop(
   }
 
   // facing a raise
+  if (equity && !modeledCallIsPlayable(equity, view, p, trace)) return { type: 'fold' };
   if (tier === 1 && rng() < p.pfrRatio) {
     trace.push('premium vs raise: 3-betting');
     return raiseTo(view.currentBet * 3);
@@ -140,7 +187,7 @@ function decidePreflop(
   if (p.callStationFactor > 0.3) callThreshold += 1;
   if (p.foldToAggression > 0.6) callThreshold -= 1;
   if (view.toCall > view.myStack * 0.25) callThreshold = Math.min(callThreshold, 2);
-  if (tier <= callThreshold) {
+  if (equity || tier <= callThreshold) {
     trace.push(`calling the raise (tier ${tier} <= ${callThreshold})`);
     return { type: 'call' };
   }
@@ -154,6 +201,7 @@ function decidePostflop(
   difficulty: Difficulty,
   rng: Rng,
   trace: string[],
+  equity?: ReturnType<typeof decisionEquity>,
 ): PlayerAction {
   const info = postflopStrength(view.holeCards, view.board);
   const noise = (rng() + rng() - 1) * DIFFICULTY_NOISE[difficulty];
@@ -207,7 +255,7 @@ function decidePostflop(
     trace.push('semi-bluff raising the draw');
     return raiseTo(Math.round(view.currentBet * 2.5));
   }
-  if (s >= effRequired) {
+  if (equity ? modeledCallIsPlayable(equity, view, p, trace) : s >= effRequired) {
     trace.push('calling: strength beats the price');
     return { type: 'call' };
   }
@@ -217,6 +265,35 @@ function decidePostflop(
   }
   trace.push('folding: too weak for the price');
   return { type: 'fold' };
+}
+
+/** Conditional checkdown equity needs a realization policy while betting remains; this is not proven action EV. */
+function modeledCallIsPlayable(equity: ReturnType<typeof decisionEquity>, view: BotView, p: Personality, trace: string[]): boolean {
+  const realization = equity.terminal ? 1 : Math.min(1, (view.phase === 'flop' ? 0.72 : 0.85) + 0.15 * p.callStationFactor);
+  const value = equity.expectedAward! * realization + equity.heroRefund - equity.call;
+  if (!equity.terminal) trace.push(`Conditional checkdown realization heuristic: ${(100 * realization).toFixed(0)}%, policy value ${value.toFixed(1)} chips.`);
+  return value >= 0;
+}
+
+/** Positional <=10BB push/fold heuristic, not a solved equilibrium or ICM strategy. */
+function decideShortStack(view: BotView, p: Personality, depth: number, equity: ReturnType<typeof decisionEquity> | undefined, trace: string[]): PlayerAction {
+  const tier = handTier(view.holeCards);
+  const facingRaise = view.currentBet > view.bigBlind;
+  let threshold = p.vpipTierByPosition[view.position] + (depth <= 5 ? 1 : 0);
+  if (facingRaise) {
+    threshold -= 2;
+    if (view.toCall / Math.max(1, view.pot + view.toCall) <= 0.2) threshold += 1;
+    if (equity && !modeledCallIsPlayable(equity, view, p, trace)) {
+      trace.push('short-stack: modeled call loses chips; folding.');
+      return { type: 'fold' };
+    }
+  }
+  trace.push(`short-stack: ${depth.toFixed(1)}BB matched cover; positional push/fold heuristic tier <= ${Math.min(7, threshold).toFixed(1)}.`);
+  if (tier <= Math.min(7, Math.max(1, threshold))) {
+    if (view.legal.raise) return raiseTo(Math.min(view.legal.raise.maxTo, Math.round(depth * view.bigBlind)));
+    if (view.legal.call) return { type: 'call' };
+  }
+  return { type: view.legal.check ? 'check' : 'fold' };
 }
 
 function raiseTo(target: number): PlayerAction {

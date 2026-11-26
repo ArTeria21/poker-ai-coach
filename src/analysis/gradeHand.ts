@@ -3,198 +3,324 @@ import type { HandRecord, ReplayStep } from '../engine/replay';
 import { replayHand } from '../engine/replay';
 import { buildBotView, type BotView } from '../bots/botDecision';
 import { handTier, handLabel } from '../bots/preflopTiers';
-import { monteCarloEquity } from '../equity/monteCarlo';
-import { postflopAdvice, preflopAdvice, type CoachAdvice } from '../coach/recommend';
-import { pct } from '../coach/potOdds';
+import { PERSONALITIES } from '../bots/personalities';
+import { postflopStrength } from '../bots/handStrength';
+import { decisionEquity, decisionFacts } from '../equity/decisionEquity';
+import { RangeSamplingError } from '../equity/monteCarlo';
+import { drawCompletionOuts, spr } from '../math/pokerMath';
 
-export type MistakeCategory =
-  | 'CALL_WITHOUT_ODDS' // paid more than the hand's equity justified
-  | 'LOOSE_PREFLOP' // played a hand outside the recommended range
-  | 'MISSED_VALUE' // checked/called when a value bet/raise was there
-  | 'UNNECESSARY_FOLD' // folded getting the right price
-  | 'FOLD_WHEN_FREE' // folded when checking cost nothing
-  | 'WILD_RAISE'; // raised where the coach saw a clear fold
-
-export type Verdict = 'good' | 'minor' | 'mistake' | 'blunder';
-
+export type Verdict = 'good' | 'minor' | 'mistake' | 'blunder' | 'uncertain';
+export type MistakeCategory = 'CALL_WITHOUT_ODDS' | 'LOOSE_PREFLOP' | 'FOLD_WHEN_FREE' | 'WILD_RAISE' | 'SIZING';
 export interface DecisionGrade {
+  handId: string;
+  decisionIndex: number;
+  seatIndex: number;
   street: Street;
   board: Card[];
-  /** What the hero actually did. */
   action: PlayerAction;
   actionText: string;
-  /** What the coach recommends in that exact spot (with equity if postflop). */
-  advice: CoachAdvice;
   verdict: Verdict;
   category?: MistakeCategory;
-  /** Short comparative note, e.g. "You called 110 — 18% equity vs 33% needed." */
+  basis: 'facts' | 'chip-ev-model' | 'range-model' | 'sizing-model';
   note: string;
+  facts: {
+    pot: number;
+    toCall: number;
+    contestablePot: number;
+    netCallCost: number;
+    /** Required fraction of eligible chip awards, not whole-field showdown equity; null with no eligible pot. */
+    requiredPotShare: number | null;
+    amountAdded: number;
+    raiseTo: number | null;
+    raiseIncrement: number;
+    matchedAdded: number;
+    matchedRaiseIncrement: number;
+    effectiveDepthBB: number;
+    spr: ReturnType<typeof spr>;
+    draws: ReturnType<typeof drawCompletionOuts> | null;
+  };
+  model: {
+    showdownEquity: number;
+    callChipEV: number;
+    horizon: 'terminal' | 'conditional-checkdown';
+    expectedAward: number;
+    heroRefund: number;
+    samplingBand: { confidence: number; low: number; high: number; halfWidth: number };
+    assumptions: string[];
+  } | null;
 }
-
 export interface HandGrade {
   handId: string;
   decisions: DecisionGrade[];
-  /** e.g. "3 good decisions · 1 mistake" */
   summary: string;
   mistakes: number;
   blunders: number;
 }
+const ITERATIONS = 1000;
 
-/** Iterations for post-hand equity — higher precision than the live coach. */
-const GRADE_ITERATIONS = 10_000;
-
-/** Grades every hero decision in a recorded hand. Pure and synchronous. */
-export function gradeHand(record: HandRecord, heroSeatIndex: number): HandGrade {
-  const { steps } = replayHand(record);
-  return gradeHandFromSteps(record.handId, steps, heroSeatIndex);
+/** Same public decision identity and sampling budget for live and replay; never uses the deal seed. */
+function decisionSeed(view: BotView): number {
+  let hash = 2166136261;
+  for (const c of `${view.handId}:${view.decisionIndex}:${view.seatIndex}`) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+  return hash >>> 0;
 }
 
-export function gradeHandFromSteps(
-  handId: string,
-  steps: ReplayStep[],
-  heroSeatIndex: number,
-): HandGrade {
+export function gradeHand(record: HandRecord, heroSeatIndex: number): HandGrade {
+  return gradeHandFromSteps(record.handId, replayHand(record).steps, heroSeatIndex);
+}
+export function gradeHandFromSteps(handId: string, steps: ReplayStep[], heroSeatIndex: number): HandGrade {
   const decisions: DecisionGrade[] = [];
   for (let i = 1; i < steps.length; i++) {
     const step = steps[i];
-    if (step.seatIndex !== heroSeatIndex || !step.action) continue;
-    const before = steps[i - 1].state;
-    if (before.phase === 'complete') break;
-    const view = buildBotView(before, heroSeatIndex);
-    const advice =
-      view.phase === 'preflop'
-        ? preflopAdvice(view)
-        : postflopAdvice(
-            view,
-            monteCarloEquity({
-              hero: view.holeCards,
-              board: view.board,
-              opponents: view.numActive - 1,
-              iterations: GRADE_ITERATIONS,
-              seed: hashSeed(handId, i),
-            }),
-          );
-    decisions.push(gradeDecision(view, advice, step.action));
+    if (step.seatIndex === heroSeatIndex && step.action) {
+      const before = buildBotView(steps[i - 1].state, heroSeatIndex);
+      decisions.push(gradeDecision(before, step.action));
+    }
   }
-  const mistakes = decisions.filter((d) => d.verdict === 'mistake').length;
-  const blunders = decisions.filter((d) => d.verdict === 'blunder').length;
-  const good = decisions.filter((d) => d.verdict === 'good').length;
-  const parts: string[] = [];
-  if (good > 0) parts.push(`${good} good decision${good === 1 ? '' : 's'}`);
-  const minor = decisions.length - good - mistakes - blunders;
-  if (minor > 0) parts.push(`${minor} slightly off`);
-  if (mistakes > 0) parts.push(`${mistakes} mistake${mistakes === 1 ? '' : 's'}`);
-  if (blunders > 0) parts.push(`${blunders} blunder${blunders === 1 ? '' : 's'}`);
-  return {
-    handId,
-    decisions,
-    summary: parts.length > 0 ? parts.join(' · ') : 'no decisions to grade',
-    mistakes,
-    blunders,
-  };
+  const counts = (verdict: Verdict) => decisions.filter(d => d.verdict === verdict).length;
+  const summary = (['good', 'minor', 'mistake', 'blunder', 'uncertain'] as const).filter(v => counts(v)).map(v => `${counts(v)} ${v}`).join(' · ');
+  return { handId, decisions, summary: summary || 'no decisions to grade', mistakes: counts('mistake'), blunders: counts('blunder') };
 }
 
-/** Pure verdict mapping — exported for direct unit testing. */
-export function gradeDecision(view: BotView, advice: CoachAdvice, action: PlayerAction): DecisionGrade {
-  const street = view.phase;
-  const actionText = describeAction(action, view);
-  const base = { street, board: view.board, action, actionText, advice };
-  const equity = advice.equity;
-  const required = advice.requiredEquity;
-
-  const agrees =
-    action.type === advice.action ||
-    (action.type === 'check' && advice.action === 'call' && view.toCall === 0) ||
-    (action.type === 'call' && advice.action === 'check' && view.toCall === 0);
-
-  if (agrees) {
-    const note =
-      action.type === 'raise' && advice.raiseTo != null && action.amount != null && action.amount > advice.raiseTo * 2.5
-        ? `Right idea, but ${action.amount} is much bigger than the coach's ${advice.raiseTo}.`
-        : 'Matches the coach.';
-    return { ...base, verdict: 'good', note };
-  }
-
-  // disagreement — classify and weigh it
-  if (action.type === 'fold') {
-    if (view.toCall === 0) {
-      return {
-        ...base,
-        verdict: 'blunder',
-        category: 'FOLD_WHEN_FREE',
-        note: 'You folded when checking was free — never pay (or quit) when you can see a card for nothing.',
-      };
-    }
-    const edge = equity != null && required != null ? equity - required : 0;
-    return {
-      ...base,
-      verdict: edge > 0.15 ? 'blunder' : edge > 0.05 ? 'mistake' : 'minor',
-      category: 'UNNECESSARY_FOLD',
-      note:
-        equity != null && required != null
-          ? `You folded with ${pct(equity)} equity while only needing ${pct(required)} — that call makes money.`
-          : `The coach liked ${advice.action} here.`,
-    };
-  }
-
-  if ((action.type === 'call' || action.type === 'raise') && advice.action === 'fold') {
-    if (street === 'preflop') {
-      const tier = handTier(view.holeCards);
-      return {
-        ...base,
-        verdict: tier >= 7 ? 'mistake' : 'minor',
-        category: action.type === 'raise' ? 'WILD_RAISE' : 'LOOSE_PREFLOP',
-        note: `${handLabel(view.holeCards)} is outside the recommended range here — these spots leak chips over time.`,
-      };
-    }
-    const gap = equity != null && required != null ? required - equity : 0;
-    return {
-      ...base,
-      verdict: gap > 0.12 ? 'blunder' : gap > 0.04 ? 'mistake' : 'minor',
-      category: action.type === 'raise' ? 'WILD_RAISE' : 'CALL_WITHOUT_ODDS',
-      note:
-        equity != null && required != null
-          ? `You put chips in with ${pct(equity)} equity needing ${pct(required)} — a losing price.`
-          : `The coach saw a clear fold.`,
-    };
-  }
-
-  if (advice.action === 'raise' && (action.type === 'call' || action.type === 'check')) {
-    return {
-      ...base,
-      verdict: equity != null && equity > 0.75 ? 'mistake' : 'minor',
-      category: 'MISSED_VALUE',
-      note: `Strong hands want a bigger pot — ${action.type === 'check' ? 'checking' : 'just calling'} lets worse hands off cheap.`,
-    };
-  }
-
-  if (action.type === 'raise' && (advice.action === 'call' || advice.action === 'check')) {
-    return {
-      ...base,
-      verdict: 'minor',
-      category: 'WILD_RAISE',
-      note: 'More aggressive than needed — not terrible, but the coach preferred to keep the pot controlled.',
-    };
-  }
-
-  return { ...base, verdict: 'minor', note: `The coach preferred ${advice.action}.` };
-}
-
-function describeAction(action: PlayerAction, view: BotView): string {
-  switch (action.type) {
+/** Grades the pre-action information set; model-based conclusions are explicitly scoped to chip EV or heuristics. */
+export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade {
+  const legal = view.legal;
+  let valid = false;
+  switch (input.type) {
     case 'fold':
-      return 'You folded';
+      valid = legal.fold;
+      break;
     case 'check':
-      return 'You checked';
+      valid = legal.check;
+      break;
     case 'call':
-      return `You called ${view.toCall}`;
+      valid = !!legal.call;
+      break;
     case 'raise':
-      return `You ${view.currentBet === 0 ? 'bet' : 'raised to'} ${action.amount}`;
+      valid = !!legal.raise && Number.isSafeInteger(input.amount)
+        && input.amount! >= legal.raise.minTo && input.amount! <= legal.raise.maxTo;
+      break;
   }
-}
-
-function hashSeed(handId: string, i: number): number {
-  let h = i * 2654435761;
-  for (let k = 0; k < handId.length; k++) h = (h * 31 + handId.charCodeAt(k)) | 0;
-  return h >>> 0;
+  if (!valid) throw new Error('Cannot grade an illegal action');
+  const action: PlayerAction = input.type === 'raise' ? { type: 'raise', amount: input.amount } : { type: input.type };
+  const projection = decisionFacts(view);
+  const opponents = view.publicPlayers.filter(p => p.seatIndex !== view.seatIndex && !p.folded);
+  const raiseTo = action.type === 'raise' ? action.amount! : null;
+  const added = raiseTo === null ? action.type === 'call' ? view.toCall : 0 : raiseTo - view.myStreetBet;
+  const matchedTo = raiseTo === null ? 0 : Math.min(raiseTo, Math.max(0, ...opponents.map(p => p.stack + p.streetBet)));
+  const grade: DecisionGrade = {
+    handId: view.handId, decisionIndex: view.decisionIndex, seatIndex: view.seatIndex,
+    street: view.phase, board: [...view.board], action,
+    actionText: action.type === 'raise' ? `Raise to ${raiseTo}` : action.type === 'call' ? `Call ${view.toCall}` : action.type,
+    verdict: 'uncertain', basis: 'range-model', note: 'The available model does not establish the value of this action.', model: null,
+    facts: {
+      pot: view.pot, toCall: view.toCall, amountAdded: added,
+      contestablePot: projection.contestablePot,
+      netCallCost: projection.call - projection.heroRefund,
+      requiredPotShare: projection.contestablePot > 0
+        ? (projection.call - projection.heroRefund) / projection.contestablePot
+        : null,
+      raiseTo, raiseIncrement: raiseTo === null ? 0 : raiseTo - view.currentBet,
+      matchedAdded: raiseTo === null ? added : Math.max(0, matchedTo - view.myStreetBet),
+      matchedRaiseIncrement: raiseTo === null ? 0 : Math.max(0, matchedTo - view.currentBet),
+      effectiveDepthBB: projection.effectiveDepthBB,
+      spr: spr(projection.effectiveBehind, view.pot),
+      draws: view.phase === 'preflop' ? null : drawCompletionOuts({ hero: view.holeCards, board: view.board }),
+    },
+  };
+  const verdict = (
+    value: Verdict,
+    basis: DecisionGrade['basis'],
+    note: string,
+    category?: MistakeCategory,
+  ): DecisionGrade => ({ ...grade, verdict: value, basis, note, ...(category ? { category } : {}) });
+  if (action.type === 'fold' && view.toCall === 0) {
+    return verdict(
+      'mistake',
+      'facts',
+      'Checking was free. Folding gives up the hand unnecessarily; no chip-loss amount is inferred.',
+      'FOLD_WHEN_FREE',
+    );
+  }
+  try {
+    const eq = decisionEquity(view, { iterations: ITERATIONS, seed: decisionSeed(view) });
+    const halfWidth = eq.contestablePot * Math.sqrt(Math.log(40) / (2 * ITERATIONS));
+    grade.model = {
+      showdownEquity: eq.equity, callChipEV: eq.conditionalChipEV, horizon: eq.model,
+      expectedAward: eq.expectedAward!, heroRefund: eq.heroRefund,
+      samplingBand: { confidence: 0.95, low: eq.conditionalChipEV - halfWidth, high: eq.conditionalChipEV + halfWidth, halfWidth },
+      assumptions: [
+        ...eq.assumptions,
+        '95% bounded-award Hoeffding band covers sampling uncertainty only, not range-model uncertainty.',
+        'All modeled awards and chip EV describe a hypothetical capped call, not the chosen raise or fold.',
+        'Chip EV is not prize EV, an ICM recommendation or a solved strategy.',
+        'Structural draw probabilities use uniform unseen next cards, not range-conditioned clean winning outs.',
+      ],
+    };
+  } catch (error) {
+    if (!(error instanceof RangeSamplingError)) throw error;
+    return verdict(
+      'uncertain',
+      'range-model',
+      'Range sampling budget was exhausted; no replacement ATC estimate or reliable verdict is available.',
+    );
+  }
+  if ((action.type === 'call' || action.type === 'fold') && projection.terminal) {
+    const band = grade.model!.samplingBand;
+    if (band.low <= 0 && band.high >= 0) {
+      return verdict(
+        'uncertain',
+        'chip-ev-model',
+        'The terminal chip-EV sampling band overlaps zero; range uncertainty and ICM add further limits.',
+      );
+    }
+    const callWins = band.low > 0;
+    if (action.type === 'fold' && callWins) {
+      return verdict(
+        'uncertain',
+        'chip-ev-model',
+        'The terminal model favors calling in chips, but a tournament fold may be justified by ICM. Without prize-EV analysis, no decision error is established.',
+      );
+    }
+    if ((action.type === 'call') === callWins) {
+      return verdict(
+        'good',
+        'chip-ev-model',
+        `Reasonable under the terminal chip-EV model (${grade.model!.callChipEV.toFixed(1)} chips); prize EV and range accuracy remain unproven.`,
+      );
+    }
+    return verdict(
+      action.type === 'call' && -band.high > Math.max(view.bigBlind, view.toCall * 0.3) ? 'blunder' : 'mistake',
+      'chip-ev-model',
+      'The terminal modeled chip-EV band is negative. This call loses chips under these ranges; ICM and model uncertainty are separate.',
+      'CALL_WITHOUT_ODDS',
+    );
+  }
+  const tier = handTier(view.holeCards);
+  const positionalPrior = Math.min(7, PERSONALITIES.shark.vpipTierByPosition[view.position] + (projection.effectiveDepthBB <= 5 ? 1 : 0));
+  if (action.type === 'raise') {
+    const ratio = grade.facts.matchedRaiseIncrement / Math.max(1, view.pot + view.toCall);
+    const forced = legal.raise!.minTo === legal.raise!.maxTo;
+    const minimumRaise = raiseTo === legal.raise!.minTo;
+    if (view.phase === 'preflop') {
+      if (!minimumRaise &&
+        !forced &&
+        projection.effectiveDepthBB > 20 &&
+        tier >= 3 &&
+        grade.facts.matchedAdded > Math.max(10 * view.bigBlind, view.myStack * 0.5)) {
+        return verdict(
+          'mistake',
+          'sizing-model',
+          `${handLabel(view.holeCards)} commits a large matched portion of a deep stack. This is a sizing heuristic, not a computed raise EV.`,
+          'WILD_RAISE',
+        );
+      }
+      if (!minimumRaise && !forced && view.currentBet > view.bigBlind && matchedTo > 5 * view.currentBet && tier >= 2) {
+        return verdict(
+          'minor',
+          'sizing-model',
+          'This re-raise is unusually large relative to the prior raise; opponent fold/call responses are not modeled.',
+          'SIZING',
+        );
+      }
+      if (tier > positionalPrior) {
+        return verdict(
+          tier >= 7 ? 'mistake' : 'minor',
+          'range-model',
+          'This starting hand is outside a conservative positional raising prior; no exact raise EV is claimed.',
+          'LOOSE_PREFLOP',
+        );
+      }
+      const typicalSize = projection.effectiveDepthBB <= 10
+        || (view.currentBet <= view.bigBlind && matchedTo <= 5 * view.bigBlind)
+        || (view.currentBet > view.bigBlind && matchedTo <= 4 * view.currentBet);
+      if (tier <= positionalPrior && typicalSize) {
+        return verdict(
+          'good',
+          'sizing-model',
+          'A plausible positional raise size for this starting hand; raise EV and ICM are not established.',
+        );
+      }
+    } else {
+      const info = postflopStrength(view.holeCards, view.board);
+      if (!forced && info.madeCategory <= 3 && ratio < 0.1) {
+        return verdict(
+          'minor',
+          'sizing-model',
+          'This very small value size may miss value; opponent response and slow-play benefits remain unknown.',
+          'SIZING',
+        );
+      }
+      if (view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd') && ratio >= 0.25 && ratio <= 1.2) {
+        return verdict(
+          'good',
+          'sizing-model',
+          `A genuine personal ${info.flushDraw ? 'flush draw' : 'open-ended straight draw'} supports a plausible semi-bluff size. Fold equity and action EV are not proven.`,
+        );
+      }
+      const cbet = view.phase === 'flop' && view.iAmLastAggressor && !view.publicHistory.some(a => a.street === view.phase && a.type === 'raise') && view.toCall === 0;
+      const dry = new Set(view.board.map(c => c[1])).size >= 2 && Math.max(...view.board.map(c => view.board.filter(b => b[1] === c[1]).length)) <= 2;
+      if (cbet && dry && handLabel(view.holeCards).startsWith('AK') && ratio >= 0.25 && ratio <= 0.8) {
+        return verdict(
+          'good',
+          'sizing-model',
+          'A plausible AK continuation bet with real preflop initiative; fold equity is an explicit unmeasured assumption.',
+        );
+      }
+      if (info.strength >= 0.6 && ratio >= 0.2 && ratio <= 1.5) {
+        return verdict(
+          'good',
+          'sizing-model',
+          'A plausible value size under the hand-strength heuristic; response ranges and raise EV remain unknown.',
+        );
+      }
+    }
+    return verdict(
+      'uncertain',
+      'sizing-model',
+      'A raise changes opponent fold/call responses. Without that model, its action EV is uncertain, including possible bluffs.',
+    );
+  }
+  if (view.phase === 'preflop') {
+    const pressure = view.toCall > Math.max(5 * view.bigBlind, 0.25 * view.myStack);
+    const raisePressure = view.currentBet > 3 * view.bigBlind ? 2 : view.currentBet > view.bigBlind ? 1 : 0;
+    const callPrior = pressure ? Math.min(2, positionalPrior) : Math.max(1, positionalPrior - raisePressure);
+    if (action.type === 'call' && tier > callPrior && pressure) {
+      return verdict(
+        'mistake',
+        'range-model',
+        'This expensive preflop call conflicts with a conservative starting-hand prior. Conditional checkdown equity does not prove its EV.',
+        'LOOSE_PREFLOP',
+      );
+    }
+    if (action.type === 'call' && tier > callPrior) {
+      return verdict(
+        'minor',
+        'range-model',
+        'Voluntarily entering with this weak starting hand falls outside the positional prior; this is a heuristic warning.',
+        'LOOSE_PREFLOP',
+      );
+    }
+    if (action.type === 'call' && tier <= callPrior && view.currentBet <= 3 * view.bigBlind) {
+      return verdict(
+        'good',
+        'range-model',
+        'A plausible starting hand at a modest preflop price; future realization and ICM remain unknown.',
+      );
+    }
+    if (action.type === 'fold' && tier > callPrior) {
+      return verdict(
+        'good',
+        'range-model',
+        'A reasonable conservative preflop fold under the price and starting-hand heuristic, without a prize-EV claim.',
+      );
+    }
+  }
+  return verdict(
+    'uncertain',
+    'range-model',
+    action.type === 'check'
+      ? 'Checking can preserve slow plays or control the pot; this model does not prove missed value.'
+      : 'Betting or opponent responses remain possible. Full-runout equity and next-card draw hits do not prove this action EV.',
+  );
 }
