@@ -3,7 +3,9 @@ import type { Card, GameState, PlayerAction, TableConfig } from '../engine/types
 import type { ReplayStep } from '../engine/replay';
 import { startHand, startHandWithDeck, applyAction } from '../engine/gameStateMachine';
 import { freshDeck } from '../engine/deck';
-import { buildBotView } from '../bots/botDecision';
+import { buildBotView, decideAction } from '../bots/botDecision';
+import { PERSONALITIES } from '../bots/personalities';
+import { mulberry32 } from '../engine/rng';
 import { gradeDecision, gradeHand, gradeHandFromSteps } from './gradeHand';
 
 function fixture(holes:[Card,Card][], board:Card[], stacks=holes.map(()=>1000), ante=0) {
@@ -142,11 +144,50 @@ it('uses the neutral positional prior for the same opening hand UTG versus butto
   const button=grade(late,{type:'raise',amount:30});
   expect(early.category).toBe('LOOSE_PREFLOP');expect(button.verdict).toBe('good');
 });
+it('pins the 25BB / 3-player starting-hand gate and the 40BB jam/sizing floor',()=>{
+  const board:Card[]=['2c','5d','8s','9c','3d'];
+  const open=(stacks:number[],amount:number)=>grade(fixture(([['7h','2d'],['Kc','Kd'],['Qh','Qd']] as [Card,Card][]).slice(0,stacks.length),board,stacks),{type:'raise',amount});
+  expect(open([250,1000,1000],30).verdict).toBe('uncertain');
+  expect(open([260,1000,1000],30).category).toBe('LOOSE_PREFLOP');
+  expect(open([1000,1000],30).verdict).toBe('uncertain'); // heads-up
+  expect(open([410,1000,1000],410)).toMatchObject({verdict:'mistake',category:'WILD_RAISE'}); // first-in open-jam
+  const rejam=(stack:number,action:PlayerAction)=>{let state=fixture([['Kc','Kd'],['Qh','Qd'],['As','8h']],board,[1000,1000,stack]);state=act(state,{type:'raise',amount:30});state=act(state,{type:'fold'});return grade(state,action);};
+  expect(rejam(100,{type:'fold'}).verdict).toBe('uncertain'); // 10BB A8o fold is not praised by 100BB priors
+  expect(rejam(220,{type:'raise',amount:220}).verdict).toBe('uncertain');
+  expect(['WILD_RAISE','SIZING']).not.toContain(rejam(400,{type:'raise',amount:400}).category);
+  expect(rejam(410,{type:'raise',amount:200}).category).toBe('SIZING');
+  expect(rejam(1000,{type:'raise',amount:1000})).toMatchObject({verdict:'mistake',category:'WILD_RAISE'});
+});
 it('recognizes a genuine open-ended semi-bluff separately from a gutshot',()=>{
   let state=fixture([['6h','7h'],['As','Ad']],['4c','5d','Ks','2c','Qd']);
   state=passTo(state,'flop');state=act(state,{type:'check'});
   const result=grade(state,{type:'raise',amount:10});
   expect(result.verdict).toBe('good');expect(result.note).toContain('open-ended');
+});
+it('treats a double gutshot as a strong semi-bluff draw without calling it open-ended',()=>{
+  let state=fixture([['8h','Td'],['As','Ad']],['6c','9s','Qd','2c','3d']);
+  state=passTo(state,'flop');state=act(state,{type:'check'});
+  const result=grade(state,{type:'raise',amount:10});
+  expect(result.verdict).toBe('good');expect(result.note).toContain('double-gutshot');expect(result.note).not.toContain('open-ended');
+});
+it.each<[[Card,Card],Card[]]>([
+  [['7c','2d'],['As','Ah','Ad','Ks','Kh']],[['3c','4d'],['2h','5h','8h','Jh','Kh']],[['3c','4d'],['9s','Th','Jd','Qc','Ks']],[['3c','4d'],['As','Ad','Ah','Ac','2d']],
+])('does not credit a hand played off the board %j as value',(hole,board)=>{
+  let state=fixture([hole,['6c','6d']],board);state=act(state,{type:'raise',amount:200});state=passTo(state,'river');state=act(state,{type:'check'});
+  expect(grade(state,{type:'raise',amount:200}).verdict).toBe('uncertain'); // half pot
+  expect(grade(state,{type:'raise',amount:20}).category).toBeUndefined(); // tiny size: no "missed value" SIZING
+});
+it('does not call a heuristic value raise good when the modeled equity says it is behind',()=>{
+  let state=fixture([['6s','Jc'],['Kd','Kh']],['Qs','As','Tc','Ts','7s']);
+  for(const action of [{type:'raise',amount:30},{type:'raise',amount:90},{type:'call'}] as PlayerAction[])state=act(state,action);
+  state=passTo(state,'river');state=act(state,{type:'raise',amount:150});
+  const result=grade(state,{type:'raise',amount:450});
+  expect(result.model!.showdownEquity).toBeLessThan(0.5);expect(result.verdict).toBe('uncertain');
+});
+it('does not flag a tiny bet as missed value when draw bonuses, not a made flush, push strength high',()=>{
+  let state=fixture([['8h','8d'],['As','Kc']],['6h','7h','9h','9d','2c']);state=act(state,{type:'raise',amount:200});
+  state=passTo(state,'turn');state=act(state,{type:'check'});
+  expect(grade(state,{type:'raise',amount:10}).category).toBeUndefined(); // two pair + FD + OESD = 0.87
 });
 it('keeps a positive chip-EV tournament fold uncertain and out of generic mistake counts',()=>{
   let state=fixture([['As','Ks'],['5h','5c']],['Qs','Js','Ts','2d','3c']);
@@ -169,4 +210,28 @@ it('quotes the price against eligible awards, excluding inaccessible side pots a
     expect(result.facts.requiredPotShare).toBe(40/(150+ante));
     expect(result.facts).not.toHaveProperty('rawRequiredEquity');
   }
+});
+it('grades bubble all-in calls on ICM prize EV, not chip EV',()=>{
+  const spot=(hero:[Card,Card],payouts?:number[])=>{
+    let state=fixture([['2c','3d'],['6c','7d'],hero],[],[50,150,100],10);state=act(state,{type:'fold'});state=act(state,{type:'raise',amount:90});
+    return buildBotView({...state,config:{...state.config,payouts}},2);
+  };
+  expect(gradeDecision(spot(['As','Ks']),{type:'call'}).verdict).toBe('good');
+  const call=gradeDecision(spot(['As','Ks'],[0.65,0.35]),{type:'call'});
+  expect(call).toMatchObject({verdict:'mistake',basis:'prize-ev-model',category:'CALL_WITHOUT_ODDS'});
+  expect(call.model!.prize!.samplingBand.high).toBeLessThan(0);
+  expect(gradeDecision(spot(['As','Ks'],[0.65,0.35]),{type:'fold'})).toMatchObject({verdict:'good',basis:'prize-ev-model'});
+  expect(gradeDecision(spot(['Ah','Ad'],[0.65,0.35]),{type:'call'})).toMatchObject({verdict:'good',basis:'prize-ev-model'});
+  expect(gradeDecision(spot(['7h','2s'],[0.65,0.35]),{type:'call'}).verdict).toBe('blunder');
+  const bot=(hero:[Card,Card],payouts?:number[])=>decideAction(spot(hero,payouts),PERSONALITIES.shark,'hard',mulberry32(1)).action.type;
+  expect([bot(['As','Ks'],[0.65,0.35]),bot(['As','Ks']),bot(['Ah','Ad'],[0.65,0.35])]).toEqual(['fold','call','call']);
+  // Multiway all-in with three players left: no prize model, so no verdict.
+  for(const hero of [['Ah','Ad'],['7h','2s']] as [Card,Card][]){
+    let state=fixture([['2c','3d'],['6c','7d'],hero],[],[50,150,100],10);state=act(state,{type:'raise',amount:50});state=act(state,{type:'raise',amount:150});
+    const multi=gradeDecision(buildBotView({...state,config:{...state.config,payouts:[0.65,0.35]}},2),{type:'call'});
+    expect(multi.model!.prize).toBeNull();expect(multi).toMatchObject({verdict:'uncertain',basis:'chip-ev-model'});
+  }
+  // Heads-up: chip EV decides, and blunder severity stays in chips.
+  let hu=fixture([['As','Kd'],['7h','2s']],[],[1000,300]);hu=act(hu,{type:'raise',amount:300});
+  expect(gradeDecision(buildBotView({...hu,config:{...hu.config,payouts:[0.65,0.35]}},1),{type:'call'})).toMatchObject({verdict:'blunder',basis:'chip-ev-model'});
 });

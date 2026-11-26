@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '../engine/types';
+import { freshDeck } from '../engine/deck';
+import { evaluate7 } from '../engine/handEval';
 import { postflopStrength } from './handStrength';
 
 describe('straight draw ace boundaries', () => {
@@ -86,5 +88,46 @@ describe('draws require a personal hole-card contribution', () => {
     const river = postflopStrength(['As', 'Js'], ['Ks', 'Qs', '8d', '3c', '2h']);
     expect(river.flushDraw).toBe(false);
     expect(river.straightDraw).toBeNull();
+  });
+});
+
+describe('made hands are capped by their standing on this board', () => {
+  const bruteForceHS = (hole: [Card, Card], board: Card[]) => {
+    const deck = freshDeck().filter((c) => !hole.includes(c) && !board.includes(c));
+    const ours = evaluate7([...hole, ...board]);
+    let score = 0, n = 0;
+    for (let i = 0; i < deck.length; i++) for (let j = i + 1; j < deck.length; j++, n++) {
+      const theirs = evaluate7([deck[i], deck[j], ...board]);
+      score += theirs > ours ? 1 : theirs === ours ? 0.5 : 0;
+    }
+    return score / n;
+  };
+
+  it.each<{ hole: [Card, Card]; board: Card[] }>([
+    { hole: ['3c', '4d'], board: ['As', 'Ad', 'Ah', 'Ac', '2d'] },
+    { hole: ['7c', '2d'], board: ['As', 'Ah', 'Ad', 'Ks', 'Kh'] },
+    { hole: ['3c', '4d'], board: ['9s', 'Th', 'Jd', 'Qc', 'Ks'] },
+  ])('board-made $hole on $board is worth exactly its hand strength', ({ hole, board }) => {
+    expect(postflopStrength(hole, board).strength).toBeCloseTo(bruteForceHS(hole, board), 10);
+  });
+
+  it('keeps quads on board below 0.1 and treats a board pair as high card', () => {
+    expect(postflopStrength(['3c', '4d'], ['As', 'Ad', 'Ah', 'Ac', '2d']).strength).toBeLessThan(0.1);
+    expect(postflopStrength(['Ah', '2d'], ['Ks', 'Kc', '7d']).strength).toBe(0.16);
+    expect(postflopStrength(['Ah', 'Kd'], ['Ks', '8c', '3d']).strength).toBe(0.48); // real top pair unchanged
+    // two pair / trips entirely on the board: we play kickers, i.e. high card
+    expect(postflopStrength(['As', 'Qd'], ['Kc', 'Kh', '3d', '3s']).strength).toBe(0.16);
+    expect(postflopStrength(['As', 'Kd'], ['7c', '7h', '7d']).strength).toBe(0.16);
+    expect(postflopStrength(['As', 'Qd'], ['Kc', 'Kh', '7d', '7s', '2c']).strength).toBe(0.16);
+    expect(postflopStrength(['Ks', '9d'], ['Kc', 'Kh', '7d']).strength).toBe(0.7); // real trips unchanged
+    // ordering on one board: a better five-card hand never rates below a worse one
+    expect(postflopStrength(['As', 'Jd'], ['Kc', 'Kd', '7h', '7d', 'Qc']).strength).toBeGreaterThanOrEqual(postflopStrength(['3c', '3d'], ['Kc', 'Kd', '7h', '7d', 'Qc']).strength);
+    expect(postflopStrength(['Ts', 'Js'], ['4c', '5h', '4h', '3h', '5s']).strength).toBeGreaterThanOrEqual(postflopStrength(['3c', 'Td'], ['4c', '5h', '4h', '3h', '5s']).strength);
+  });
+
+  it('gives a double gutshot OESD-level credit', () => {
+    const info = postflopStrength(['8h', 'Td'], ['6c', '9s', 'Qd']);
+    expect(info.straightDraw).toBe('double-gutshot');
+    expect(info.strength).toBeCloseTo(postflopStrength(['Jd', 'Td'], ['9s', '8c', '2d']).strength, 10); // T-high OESD
   });
 });

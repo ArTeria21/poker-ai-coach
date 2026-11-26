@@ -19,10 +19,11 @@ function callOrCheck(state: GameState): GameState {
 
 describe('explicit blind positions', () => {
   it.each([
-    { n: 4, button: 0, sb: 1, bb: 2, first: 1, preflop: 3, positions: ['BTN', 'SB', 'BB', 'UTG'] },
-    { n: 4, button: null, sb: 0, bb: 1, first: 0, preflop: 2, positions: ['SB', 'BB', 'UTG', 'CO'] },
+    { n: 4, button: 0, sb: 1, bb: 2, first: 1, preflop: 3, positions: ['BTN', 'SB', 'BB', 'CO'] },
+    { n: 4, button: null, sb: 0, bb: 1, first: 0, preflop: 2, positions: ['SB', 'BB', 'CO', 'BTN'] },
+    { n: 5, button: null, sb: 0, bb: 1, first: 0, preflop: 2, positions: ['SB', 'BB', 'HJ', 'CO', 'BTN'] },
     { n: 5, button: 1, sb: null, bb: 2, first: 2, preflop: 3, positions: ['CO', 'BTN', 'BB', 'UTG', 'HJ'] },
-    { n: 3, button: null, sb: null, bb: 0, first: 0, preflop: 1, positions: ['BB', 'UTG', 'CO'] },
+    { n: 3, button: null, sb: null, bb: 0, first: 0, preflop: 1, positions: ['BB', 'CO', 'BTN'] },
     { n: 2, button: 1, sb: 1, bb: 0, first: 0, preflop: 1, positions: ['BB', 'SB'] },
   ])('uses actual positions for dealing, action, and replay: $button/$sb/$bb', ({ n, button, sb, bb, first, preflop, positions }) => {
     const cfg = config(n, button, sb, bb);
@@ -46,8 +47,8 @@ describe('explicit blind positions', () => {
     const used = new Set([...holes, ...board]);
     const deck = [...holes, ...board, ...freshDeck().filter((c) => !used.has(c))];
     let { state } = startHandWithDeck(config(4, null, 0, 1), deck);
-    state = applyAction(state, { type: 'call' }).state; // UTG
-    state = applyAction(state, { type: 'fold' }).state; // CO
+    state = applyAction(state, { type: 'call' }).state; // CO
+    state = applyAction(state, { type: 'fold' }).state; // BTN (dead button)
     state = applyAction(state, { type: 'fold' }).state; // SB
     while (state.phase !== 'complete') state = callOrCheck(state);
     expect(state.players.map((p) => p.stack)).toEqual([95, 103, 102, 100]);

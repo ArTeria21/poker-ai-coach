@@ -2,6 +2,7 @@ import type { BotView } from '../bots/botDecision';
 import { modelOpponentRanges } from '../bots/opponentRanges';
 import { buildPots } from '../engine/potManager';
 import { chipAmount } from '../math/pokerMath';
+import { icmEquities, icmOutcomeEV } from '../math/icm';
 import { monteCarloEquity } from './monteCarlo';
 
 /** Public capped-call projection; no opponent action or future street is invented. */
@@ -55,10 +56,39 @@ export function decisionEquity(view: BotView, opts: { iterations: number; seed: 
     pots: facts.pots.map(p => ({ amount: p.amount, eligible: p.eligible.map(index) })),
     oddChipOrder: clockwise.filter(seat => participantSeats.includes(seat)).map(index),
   });
+  const seats = view.publicPlayers.map(p => p.seatIndex);
+  const contestants = view.publicPlayers.filter(p => !p.folded).map(p => p.seatIndex);
+  let prize: { callEV: number; range: number } | null = null;
+  // With two players left, prize equity is linear in chips, so the chip EV already decides.
+  if (view.payouts && facts.terminal && contestants.length === 2 && seats.length >= 3) {
+    const hero = seats.indexOf(view.seatIndex), villain = contestants.find(s => s !== view.seatIndex)!;
+    const folded = view.publicPlayers.map(p => p.stack + (p.seatIndex === villain ? view.pot : 0));
+    const settle = (winners: number[]) => {
+      const stacks = view.publicPlayers.map(p => p.stack - (p.seatIndex === view.seatIndex ? view.toCall : 0));
+      if (facts.refund) stacks[seats.indexOf(facts.refund.seatIndex)] += facts.refund.amount;
+      for (const pot of facts.pots) {
+        const eligible = clockwise.filter(s => pot.eligible.includes(s));
+        const split = eligible.some(s => winners.includes(s)) ? eligible.filter(s => winners.includes(s)) : eligible;
+        split.forEach((s, i) => { stacks[seats.indexOf(s)] += Math.floor(pot.amount / split.length) + Number(i < pot.amount % split.length); });
+      }
+      return stacks;
+    };
+    const win = settle([view.seatIndex]), lose = settle([villain]);
+    prize = {
+      callEV: icmOutcomeEV(folded, view.payouts, hero, [
+        { probability: result.win, stacks: win },
+        { probability: result.tie, stacks: settle(contestants) },
+        { probability: Math.max(0, 1 - result.win - result.tie), stacks: lose },
+      ]).delta,
+      range: icmEquities(win, view.payouts)[hero] - icmEquities(lose, view.payouts)[hero],
+    };
+  }
   return {
-    ...result, ...facts, participantSeats,
+    ...result, ...facts, participantSeats, prize,
     conditionalChipEV: result.expectedAward! + facts.heroRefund - facts.call,
     model: facts.terminal ? 'terminal' as const : 'conditional-checkdown' as const,
-    assumptions: ['Heuristic public opponent ranges; folded-card likelihoods are not modeled.', 'Projected call then no future bets or folds; ICM and future equity realization are not included.'],
+    assumptions: ['Heuristic public opponent ranges; folded-card likelihoods are not modeled.', prize
+      ? 'Projected call then no future bets or folds; prize EV is exact ICM of the settled win/tie/loss stacks versus the fold, ignoring future blinds and skill.'
+      : 'Projected call then no future bets or folds; ICM and future equity realization are not included.'],
   };
 }

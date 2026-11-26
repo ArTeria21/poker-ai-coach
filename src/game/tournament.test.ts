@@ -40,7 +40,7 @@ describe('SNG lifecycle', () => {
     const initial = tournament();
     const begun = beginTournamentHand(initial);
     expect(initial.pendingHandId).toBeNull();
-    expect(begun.config).toMatchObject({ smallBlind: 10, bigBlind: 20, bigBlindAnte: 0, buttonIndex: 0, smallBlindIndex: 1, bigBlindIndex: 2 });
+    expect(begun.config).toMatchObject({ smallBlind: 10, bigBlind: 20, bigBlindAnte: 0, buttonIndex: 0, smallBlindIndex: 1, bigBlindIndex: 2, payouts: [0.65, 0.35] });
     expect(begun.config.seats.map((p) => p.stack)).toEqual([2000, 2000, 2000, 2000, 2000, 2000]);
     const ended = finishByFolds(startHand(begun.config, 42, begun.handId).state);
     const settled = settleTournamentHand(begun.tournament, ended);

@@ -1,6 +1,6 @@
 import type { Card } from '../engine/types';
-import { rankIndex, suitIndex } from '../engine/deck';
-import { analyzeHand, bestStraightHigh } from '../engine/handEval';
+import { freshDeck, rankIndex, suitIndex } from '../engine/deck';
+import { analyzeHand, bestStraightHigh, evaluate7 } from '../engine/handEval';
 
 export interface StrengthInfo {
   /** 0..1 heuristic — made hand plus draw potential. */
@@ -8,8 +8,11 @@ export interface StrengthInfo {
   /** Made-hand category 0 (straight flush) .. 8 (high card). */
   madeCategory: number;
   flushDraw: boolean;
-  straightDraw: 'oesd' | 'gutshot' | null;
+  /** double-gutshot: two personal completing ranks without four in a row — 8 outs like an OESD. */
+  straightDraw: 'oesd' | 'double-gutshot' | 'gutshot' | null;
   description: string;
+  /** Pair, two pair or trips made only by board ranks: we play kickers. */
+  boardMade: boolean;
 }
 
 /** Tunable heuristic weights. */
@@ -22,7 +25,6 @@ const BASE_BY_CATEGORY: Record<number, number> = {
   5: 0.7, // trips
   6: 0.55, // two pair
   // pair handled specially below
-  8: 0.1, // high card
 };
 const FLUSH_DRAW_BONUS = 0.18;
 const OESD_BONUS = 0.14;
@@ -37,19 +39,16 @@ export function postflopStrength(hole: [Card, Card], board: Card[]): StrengthInf
   const analysis = analyzeHand(all);
   const category = analysis.category;
 
-  let base: number;
-  if (category === 7) {
-    base = pairStrength(hole, board);
-  } else {
-    base = BASE_BY_CATEGORY[category];
-    // A pair on board making our "two pair" is weaker than two live pairs;
-    // keep simple for now — tier data can be tuned later.
-    if (category === 8) {
-      // ace-high is worth a little more than nothing
-      const hiRank = Math.max(rankIndex(hole[0]), rankIndex(hole[1]));
-      base = hiRank >= 11 ? 0.16 : 0.08;
-    }
-  }
+  const h = hole.map(rankIndex);
+  const highCard = Math.max(...h) >= 11 ? 0.16 : 0.08; // ace/king-high is worth a little more than nothing
+  const counts = new Array<number>(13).fill(0);
+  for (const c of all) counts[rankIndex(c)]++;
+  // The pair/trips ranks that play in the best five; none of ours means we only play kickers.
+  const madeRanks = counts.flatMap((n, r) => (n >= 2 ? [r] : [])).reverse().slice(0, category === 6 ? 2 : 1);
+  const boardMade = category >= 5 && !madeRanks.some((r) => h.includes(r));
+  const categoryBase = category === 8 || boardMade ? highCard : category === 7 ? pairStrength(hole, board) : BASE_BY_CATEGORY[category];
+  // A made hand is never worth more than its standing on this board (e.g. quads or a straight played off the board).
+  const base = Math.min(categoryBase, handStrengthNow(hole, board));
 
   // draws only exist while there are cards to come
   const flushDraw = board.length < 5 && category > 3 && hasFlushDraw(hole, board);
@@ -58,8 +57,8 @@ export function postflopStrength(hole: [Card, Card], board: Card[]): StrengthInf
   let strength = base;
   if (board.length < 5 && base < 0.6) {
     if (flushDraw) strength += FLUSH_DRAW_BONUS;
-    if (straightDraw === 'oesd') strength += OESD_BONUS;
-    else if (straightDraw === 'gutshot') strength += GUTSHOT_BONUS;
+    if (straightDraw === 'gutshot') strength += GUTSHOT_BONUS;
+    else if (straightDraw) strength += OESD_BONUS;
   }
   return {
     strength: Math.min(0.97, strength),
@@ -67,6 +66,7 @@ export function postflopStrength(hole: [Card, Card], board: Card[]): StrengthInf
     flushDraw,
     straightDraw,
     description: analysis.description,
+    boardMade,
   };
 }
 
@@ -84,8 +84,7 @@ function pairStrength(hole: [Card, Card], board: Card[]): number {
     return 0.28; // underpair
   }
   // paired one of our hole cards with the board
-  const pairedRank = boardRanks.includes(h1) ? h1 : boardRanks.includes(h2) ? h2 : -1;
-  if (pairedRank === -1) return 0.3; // board pair, we play a kicker
+  const pairedRank = boardRanks.includes(h1) ? h1 : h2;
   if (pairedRank === topBoard) {
     const kicker = pairedRank === h1 ? h2 : h1;
     return kicker >= 10 ? 0.48 : 0.42; // top pair, good/weak kicker
@@ -101,7 +100,7 @@ function hasFlushDraw(hole: [Card, Card], board: Card[]): boolean {
   return suitCounts.some((n, suit) => n === 4 && hole.some((c) => suitIndex(c) === suit));
 }
 
-function straightDrawType(hole: [Card, Card], board: Card[]): 'oesd' | 'gutshot' | null {
+function straightDrawType(hole: [Card, Card], board: Card[]): StrengthInfo['straightDraw'] {
   const present = new Array<boolean>(13).fill(false);
   for (const c of [...hole, ...board]) present[rankIndex(c)] = true;
   const boardPresent = new Array<boolean>(13).fill(false);
@@ -123,5 +122,57 @@ function straightDrawType(hole: [Card, Card], board: Card[]): 'oesd' | 'gutshot'
       return 'oesd';
     }
   }
-  return personalOuts.some(Boolean) ? 'gutshot' : null;
+  const outRanks = personalOuts.filter(Boolean).length;
+  return outRanks >= 2 ? 'double-gutshot' : outRanks === 1 ? 'gutshot' : null;
+}
+
+/** Opponent hand values for every two-card holding on a board, overall and per card (for exact hero-card blocker removal). */
+interface BoardHoldings { all: number[]; byCard: Map<Card, number[]> }
+const BOARD_CACHE = new Map<string, BoardHoldings>();
+const BOARD_CACHE_SIZE = 8; // one hand's flop/turn/river plus replays; opponentRanges queries ~1.2k holdings per board
+
+function boardHoldings(board: Card[]): BoardHoldings {
+  const key = [...board].sort().join('');
+  const cached = BOARD_CACHE.get(key);
+  if (cached) return cached;
+  const deck = freshDeck().filter((c) => !board.includes(c));
+  const byCard = new Map<Card, number[]>(deck.map((c) => [c, []]));
+  const all: number[] = [];
+  for (let i = 0; i < deck.length; i++) {
+    for (let j = i + 1; j < deck.length; j++) {
+      const value = evaluate7([deck[i], deck[j], ...board]);
+      all.push(value);
+      byCard.get(deck[i])!.push(value);
+      byCard.get(deck[j])!.push(value);
+    }
+  }
+  const holdings = { all: all.sort((a, b) => a - b), byCard };
+  for (const list of byCard.values()) list.sort((a, b) => a - b);
+  if (BOARD_CACHE.size >= BOARD_CACHE_SIZE) BOARD_CACHE.delete(BOARD_CACHE.keys().next().value!);
+  BOARD_CACHE.set(key, holdings);
+  return holdings;
+}
+
+/** Count of sorted values strictly below `value` (phe: lower is better). */
+function below(sorted: number[], value: number): number {
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Standard hand strength: (wins + ties/2) / N against every unseen two-card holding on the current board. */
+function handStrengthNow(hole: [Card, Card], board: Card[]): number {
+  const { all, byCard } = boardHoldings(board);
+  const value = evaluate7([...hole, ...board]);
+  const [a, b] = [byCard.get(hole[0])!, byCard.get(hole[1])!];
+  // Inclusion-exclusion drops holdings using our cards; our own pair sits in both card lists, so add it back once.
+  const better = below(all, value) - below(a, value) - below(b, value);
+  const notWorse = below(all, value + 1) - below(a, value + 1) - below(b, value + 1) + 1;
+  const n = all.length - a.length - b.length + 1;
+  const ties = notWorse - better;
+  return (n - notWorse + ties / 2) / n;
 }

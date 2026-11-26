@@ -47,6 +47,8 @@ export interface BotView {
   myStreetBet: number;
   myStack: number;
   bigBlind: number;
+  /** Tournament prize shares by place; absent for chip-EV-only hands. */
+  payouts?: number[];
   legal: LegalActions;
   numActive: number;
   /** True when this seat made the final preflop raise (continuation-bet initiative). */
@@ -91,6 +93,7 @@ export function buildBotView(state: GameState, seatIndex: number): BotView {
     myStreetBet: p.streetBet,
     myStack: p.stack,
     bigBlind: state.config.bigBlind,
+    payouts: state.config.payouts && [...state.config.payouts],
     legal: la,
     numActive: state.players.filter((q) => !q.folded).length,
     iAmLastAggressor: state.actionHistory.filter(a => a.street === 'preflop' && a.type === 'raise').at(-1)?.seatIndex === seatIndex,
@@ -116,7 +119,7 @@ export function decideAction(
   }
   const facts = decisionFacts(view);
   const raw = view.phase === 'preflop' && facts.effectiveDepthBB <= 10
-    ? decideShortStack(view, personality, facts.effectiveDepthBB, equity, trace)
+    ? decideShortStack(view, personality, facts, equity, trace)
     : view.phase === 'preflop'
       ? decidePreflop(view, personality, difficulty, rng, trace, equity)
       : decidePostflop(view, personality, difficulty, rng, trace, equity);
@@ -187,6 +190,7 @@ function decidePreflop(
   if (p.callStationFactor > 0.3) callThreshold += 1;
   if (p.foldToAggression > 0.6) callThreshold -= 1;
   if (view.toCall > view.myStack * 0.25) callThreshold = Math.min(callThreshold, 2);
+  callThreshold = Math.max(1, callThreshold); // premiums never fold to a raise
   if (equity || tier <= callThreshold) {
     trace.push(`calling the raise (tier ${tier} <= ${callThreshold})`);
     return { type: 'call' };
@@ -215,10 +219,10 @@ function decidePostflop(
   const opponents = Math.max(1, view.numActive - 1);
   const crowd = opponents === 1 ? 1 : opponents === 2 ? 0.5 : 0.25;
   const taper = view.phase === 'flop' ? 1 : view.phase === 'turn' ? 0.6 : 0.35;
-  const hasStrongDraw = view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd');
+  const hasStrongDraw = view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd' || info.straightDraw === 'double-gutshot');
 
   if (view.toCall === 0) {
-    if (s > 0.55 && rng() < Math.min(0.95, 0.7 * p.aggressionFactor)) {
+    if (s > (opponents <= 2 ? 0.45 : 0.55) && rng() < Math.min(0.95, 0.7 * p.aggressionFactor)) {
       trace.push('value betting ~60% pot');
       return raiseTo(view.myStreetBet + Math.round(0.6 * view.pot));
     }
@@ -247,7 +251,8 @@ function decidePostflop(
   const effRequired = required * (1 + 0.5 * p.foldToAggression) * (1 - 0.5 * p.callStationFactor);
   trace.push(`facing ${view.toCall} into ${view.pot}: need ${(required * 100).toFixed(0)}% (adjusted ${(effRequired * 100).toFixed(0)}%)`);
 
-  if (s >= 0.78 && view.legal.raise && rng() < Math.min(0.9, 0.35 * p.aggressionFactor)) {
+  // The modeled showdown share overrules the heuristic: never raise "for value" when it says we are not ahead.
+  if (s >= 0.78 && (!equity || equity.equity >= 0.5) && view.legal.raise && rng() < Math.min(0.9, 0.35 * p.aggressionFactor)) {
     trace.push('raising for value');
     return raiseTo(Math.round(view.currentBet * 2.5));
   }
@@ -269,14 +274,22 @@ function decidePostflop(
 
 /** Conditional checkdown equity needs a realization policy while betting remains; this is not proven action EV. */
 function modeledCallIsPlayable(equity: ReturnType<typeof decisionEquity>, view: BotView, p: Personality, trace: string[]): boolean {
+  if (equity.prize) {
+    trace.push(`ICM: call vs fold ${(100 * equity.prize.callEV).toFixed(2)}% prize equity.`);
+    return equity.prize.callEV >= 0;
+  }
   const realization = equity.terminal ? 1 : Math.min(1, (view.phase === 'flop' ? 0.72 : 0.85) + 0.15 * p.callStationFactor);
   const value = equity.expectedAward! * realization + equity.heroRefund - equity.call;
   if (!equity.terminal) trace.push(`Conditional checkdown realization heuristic: ${(100 * realization).toFixed(0)}%, policy value ${value.toFixed(1)} chips.`);
   return value >= 0;
 }
 
+/** Lowest heads-up preflop equity of any hand vs AA,KK,QQ,AKs (tier <= 1): 14.19% (Q2o) by exact enumeration, rounded down. */
+const MIN_EQUITY_VS_TIER1 = 0.13; // shortcut: a human may shove only AA (weakest hands ~6.2%, A9o), so 6.2-13% prices can be -EV vs them; and on a bubble ICM can make such cheap calls -$EV too (hard bots use prize EV there); use the range model on all difficulties if that matters
+
 /** Positional <=10BB push/fold heuristic, not a solved equilibrium or ICM strategy. */
-function decideShortStack(view: BotView, p: Personality, depth: number, equity: ReturnType<typeof decisionEquity> | undefined, trace: string[]): PlayerAction {
+function decideShortStack(view: BotView, p: Personality, facts: ReturnType<typeof decisionFacts>, equity: ReturnType<typeof decisionEquity> | undefined, trace: string[]): PlayerAction {
+  const depth = facts.effectiveDepthBB;
   const tier = handTier(view.holeCards);
   const facingRaise = view.currentBet > view.bigBlind;
   let threshold = p.vpipTierByPosition[view.position] + (depth <= 5 ? 1 : 0);
@@ -284,9 +297,18 @@ function decideShortStack(view: BotView, p: Personality, depth: number, equity: 
     threshold -= 2;
     if (view.toCall / Math.max(1, view.pot + view.toCall) <= 0.2) threshold += 1;
     if (equity && !modeledCallIsPlayable(equity, view, p, trace)) {
-      trace.push('short-stack: modeled call loses chips; folding.');
+      trace.push(`short-stack: modeled call loses ${equity.prize ? 'prize equity' : 'chips'}; folding.`);
       return { type: 'fold' };
     }
+    if (equity && facts.terminal) {
+      trace.push(`short-stack: terminal call, modeled ${equity.prize ? 'prize' : 'chip'} EV is non-negative; calling.`);
+      return { type: 'call' };
+    }
+  }
+  // Price vs the contestable pot (uncalled excess is refunded): below any hand's equity vs the tightest shove range.
+  if (facts.terminal && view.toCall > 0 && view.numActive === 2 && facts.call / facts.contestablePot < MIN_EQUITY_VS_TIER1) {
+    trace.push(`short-stack: terminal call priced ${(100 * facts.call / facts.contestablePot).toFixed(1)}% is below any hand's equity; calling.`);
+    return { type: 'call' };
   }
   trace.push(`short-stack: ${depth.toFixed(1)}BB matched cover; positional push/fold heuristic tier <= ${Math.min(7, threshold).toFixed(1)}.`);
   if (tier <= Math.min(7, Math.max(1, threshold))) {

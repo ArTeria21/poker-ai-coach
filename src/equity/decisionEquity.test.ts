@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { decisionFacts, decisionEquity } from './decisionEquity';
+import { icmEquities } from '../math/icm';
 import { buildBotView } from '../bots/botDecision';
 import { startHand, applyAction } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
@@ -53,4 +54,20 @@ it('returns public, seeded conditional checkdown EV and no full modeled ranges',
   expect(result.participantSeats).toEqual([0,1,2]);
   expect(result).not.toHaveProperty('opponentRanges');
   expect(decisionEquity(view,opts)).toEqual(result);
+});
+it('settles a tied two-contestant tournament call into conserved ICM stacks with the engine odd chip',()=>{
+  const view=projection([50,100,15],[950,900,985]);
+  view.board=['As','Ks','Qs','Js','Ts'];view.holeCards=['2c','3d'];view.toCall=50;view.payouts=[0.65,0.35];
+  view.publicPlayers[2].folded=true;
+  const result=decisionEquity(view,{iterations:50,seed:3});
+  expect(result.tie).toBe(1);
+  // Pot 245 splits 123 to seat 1 (first clockwise from the SB) and 122 to the hero; the folder keeps 985.
+  expect(result.prize!.callEV).toBeCloseTo(icmEquities([1022,1023,985],[0.65,0.35])[0]-icmEquities([950,1095,985],[0.65,0.35])[0],12);
+  expect(result.prize!.range).toBeCloseTo(icmEquities([1145,900,985],[0.65,0.35])[0]-icmEquities([900,1145,985],[0.65,0.35])[0],12);
+  const short=projection([50,300,15],[200,700,985]);
+  short.board=view.board;short.holeCards=view.holeCards;short.toCall=200;short.myStack=200;short.payouts=view.payouts;short.publicPlayers[2].folded=true;
+  const refunded=decisionEquity(short,{iterations:50,seed:3});
+  // The villain's unmatched 50 returns to the villain in every settled outcome.
+  expect(refunded.refund).toEqual({seatIndex:1,amount:50});
+  expect(refunded.prize!.callEV).toBeCloseTo(icmEquities([272,1023,985],[0.65,0.35])[0]-icmEquities([200,1095,985],[0.65,0.35])[0],12);
 });

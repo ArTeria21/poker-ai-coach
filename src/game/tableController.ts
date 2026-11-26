@@ -203,17 +203,20 @@ export class TableController {
     const player = st.config.seats[seat];
     if (!player?.personalityId) return false; // the hero shows his own bluffs
     const ps = st.players[seat];
-    const desc = bluffRevealCheck(
+    const reveal = bluffRevealCheck(
       PERSONALITIES[player.personalityId],
       ps.holeCards,
       st.board,
       this.botRng,
     );
-    if (!desc) return false;
-    this.reveals.set(seat, `${desc} — a stone-cold bluff`);
+    if (!reveal) return false;
+    const desc = reveal.description;
+    this.reveals.set(seat, reveal.semiBluff ? `${desc} with a draw — a semi-bluff` : `${desc} — a stone-cold bluff`);
     useGameStore
       .getState()
-      .appendLog([`${player.name} shows the bluff: ${formatCards(ps.holeCards)} — just ${desc}!`]);
+      .appendLog([reveal.semiBluff
+        ? `${player.name} shows the semi-bluff: ${formatCards(ps.holeCards)} — ${desc} with a live draw!`
+        : `${player.name} shows the bluff: ${formatCards(ps.holeCards)} — just ${desc}!`]);
     this.emitQuip(seat, 'showBluff');
     return true;
   }

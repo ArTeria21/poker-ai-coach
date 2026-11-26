@@ -34,6 +34,8 @@ export interface TableConfig {
   bigBlindIndex?: number;
   /** Players dealt into this hand, in seat order. All stacks must be > 0. */
   seats: SeatConfig[];
+  /** Tournament prize shares by place; ignored by the engine, read by decision models. */
+  payouts?: number[];
 }
 
 export interface PlayerState {
@@ -138,6 +140,7 @@ export function positionOfSeat(state: GameState, seatIndex: number): Position {
   if (seatIndex === state.buttonIndex) return 'BTN';
   const otherSeats = Array.from({ length: n }, (_, i) => (state.bigBlindIndex + i + 1) % n)
     .filter((i) => i !== state.bigBlindIndex && i !== state.smallBlindIndex && i !== state.buttonIndex);
-  const positions: Record<number, Position[]> = { 1: ['UTG'], 2: ['UTG', 'CO'], 3: ['UTG', 'HJ', 'CO'] };
-  return positions[otherSeats.length][otherSeats.indexOf(seatIndex)];
+  // Label by distance from the button (4-handed first-in is the 6-max CO). Dead button: the seat right of the SB acts last postflop, so it is the effective button.
+  const labels: Position[] = ['UTG', 'HJ', 'CO', 'BTN'];
+  return labels[(state.buttonIndex === null ? 4 : 3) - otherSeats.length + otherSeats.indexOf(seatIndex)];
 }

@@ -62,6 +62,7 @@ function handConfig(t: TournamentState): TableConfig {
     smallBlindIndex: indexOf(t.smallBlindSeat),
     bigBlindIndex,
     seats: live.map((p) => ({ id: p.id, name: p.name, stack: p.stack, isHero: p.isHero, personalityId: p.personalityId })),
+    payouts: [...PAYOUT_SHARES],
   };
 }
 

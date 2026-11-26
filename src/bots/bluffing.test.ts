@@ -53,7 +53,7 @@ function runBluffTest(): Map<string, Aggro> {
         if (action.type === 'raise') {
           const info = postflopStrength(view.holeCards, view.board);
           if (info.strength < 0.35) t.weakBets++;
-          if (view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd')) t.drawBets++;
+          if (view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd' || info.straightDraw === 'double-gutshot')) t.drawBets++;
         }
       }
       state = applyAction(state, action).state;

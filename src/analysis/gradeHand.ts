@@ -21,7 +21,7 @@ export interface DecisionGrade {
   actionText: string;
   verdict: Verdict;
   category?: MistakeCategory;
-  basis: 'facts' | 'chip-ev-model' | 'range-model' | 'sizing-model';
+  basis: 'facts' | 'chip-ev-model' | 'prize-ev-model' | 'range-model' | 'sizing-model';
   note: string;
   facts: {
     pot: number;
@@ -46,6 +46,8 @@ export interface DecisionGrade {
     expectedAward: number;
     heroRefund: number;
     samplingBand: { confidence: number; low: number; high: number; halfWidth: number };
+    /** ICM prize equity of call minus fold, in payout units; null outside terminal two-contestant tournament spots with 3+ players. */
+    prize: { callEV: number; samplingBand: { confidence: number; low: number; high: number; halfWidth: number } } | null;
     assumptions: string[];
   } | null;
 }
@@ -82,7 +84,7 @@ export function gradeHandFromSteps(handId: string, steps: ReplayStep[], heroSeat
   return { handId, decisions, summary: summary || 'no decisions to grade', mistakes: counts('mistake'), blunders: counts('blunder') };
 }
 
-/** Grades the pre-action information set; model-based conclusions are explicitly scoped to chip EV or heuristics. */
+/** Grades the pre-action information set; model-based conclusions are explicitly scoped to chip EV, ICM prize EV or heuristics. */
 export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade {
   const legal = view.legal;
   let valid = false;
@@ -144,16 +146,19 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
   }
   try {
     const eq = decisionEquity(view, { iterations: ITERATIONS, seed: decisionSeed(view) });
-    const halfWidth = eq.contestablePot * Math.sqrt(Math.log(40) / (2 * ITERATIONS));
+    const hoeffding = Math.sqrt(Math.log(40) / (2 * ITERATIONS));
+    const halfWidth = eq.contestablePot * hoeffding;
+    const prizeHalfWidth = eq.prize ? eq.prize.range * hoeffding : 0;
     grade.model = {
       showdownEquity: eq.equity, callChipEV: eq.conditionalChipEV, horizon: eq.model,
       expectedAward: eq.expectedAward!, heroRefund: eq.heroRefund,
       samplingBand: { confidence: 0.95, low: eq.conditionalChipEV - halfWidth, high: eq.conditionalChipEV + halfWidth, halfWidth },
+      prize: eq.prize && { callEV: eq.prize.callEV, samplingBand: { confidence: 0.95, low: eq.prize.callEV - prizeHalfWidth, high: eq.prize.callEV + prizeHalfWidth, halfWidth: prizeHalfWidth } },
       assumptions: [
         ...eq.assumptions,
         '95% bounded-award Hoeffding band covers sampling uncertainty only, not range-model uncertainty.',
         'All modeled awards and chip EV describe a hypothetical capped call, not the chosen raise or fold.',
-        'Chip EV is not prize EV, an ICM recommendation or a solved strategy.',
+        eq.prize ? 'ICM prize EV is not a solved strategy.' : 'Chip EV is not prize EV, an ICM recommendation or a solved strategy.',
         'Structural draw probabilities use uniform unseen next cards, not range-conditioned clean winning outs.',
       ],
     };
@@ -166,38 +171,49 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
     );
   }
   if ((action.type === 'call' || action.type === 'fold') && projection.terminal) {
-    const band = grade.model!.samplingBand;
+    const prize = grade.model!.prize;
+    const players = view.publicPlayers.length;
+    if (view.payouts && players >= 3 && !prize) {
+      return verdict('uncertain', 'chip-ev-model', 'Multiway terminal pot with three or more players left: chip EV does not decide tournament calls, and multiway prize EV is not modeled.');
+    }
+    const band = prize ? prize.samplingBand : grade.model!.samplingBand;
+    const basis = prize ? 'prize-ev-model' : 'chip-ev-model';
+    const model = prize ? 'terminal ICM prize-EV model' : 'terminal chip-EV model';
+    // Two players left: prize equity is linear in chips, so chip EV sign is the prize EV sign; heads-up blunder severity stays in chips.
+    const scope = view.payouts && !prize ? ' With two players left, prize EV is linear in chips, so its sign matches; severity is in chips.' : '';
+    const value = prize ? `${(100 * prize.callEV / view.payouts!.reduce((a, b) => a + b, 0)).toFixed(2)}% of the prize pool vs folding` : `${grade.model!.callChipEV.toFixed(1)} chips`;
     if (band.low <= 0 && band.high >= 0) {
-      return verdict(
-        'uncertain',
-        'chip-ev-model',
-        'The terminal chip-EV sampling band overlaps zero; range uncertainty and ICM add further limits.',
-      );
+      return verdict('uncertain', basis, `The ${model} sampling band overlaps zero (${value}); range uncertainty adds further limits.${scope}`);
     }
     const callWins = band.low > 0;
     if (action.type === 'fold' && callWins) {
       return verdict(
         'uncertain',
-        'chip-ev-model',
-        'The terminal model favors calling in chips, but a tournament fold may be justified by ICM. Without prize-EV analysis, no decision error is established.',
+        basis,
+        `The ${model} favors calling (${value}), but fold errors are not asserted from heuristic opponent ranges.${scope}`,
       );
     }
     if ((action.type === 'call') === callWins) {
-      return verdict(
-        'good',
-        'chip-ev-model',
-        `Reasonable under the terminal chip-EV model (${grade.model!.callChipEV.toFixed(1)} chips); prize EV and range accuracy remain unproven.`,
-      );
+      return verdict('good', basis, `Reasonable under the ${model} (call ${value}); ${view.payouts ? 'range accuracy remains' : 'prize EV and range accuracy remain'} unproven.${scope}`);
     }
+    // Blunder beyond max(BB, 30% of the call) chips; for prize EV, those chips at the average chip value.
+    const chips = Math.max(view.bigBlind, view.toCall * 0.3);
+    const threshold = prize ? chips * view.payouts!.reduce((a, b) => a + b, 0) / view.publicPlayers.reduce((sum, p) => sum + p.stack, view.pot) : chips;
     return verdict(
-      action.type === 'call' && -band.high > Math.max(view.bigBlind, view.toCall * 0.3) ? 'blunder' : 'mistake',
-      'chip-ev-model',
-      'The terminal modeled chip-EV band is negative. This call loses chips under these ranges; ICM and model uncertainty are separate.',
+      -band.high > threshold ? 'blunder' : 'mistake',
+      basis,
+      prize
+        ? `The ${model} band is negative (${value}): this call loses tournament equity versus folding under these ranges, whatever it does in chips; model uncertainty is separate.`
+        : `The terminal modeled chip-EV band is negative. This call loses chips under these ranges; model uncertainty is separate.${scope}`,
       'CALL_WITHOUT_ODDS',
     );
   }
   const tier = handTier(view.holeCards);
-  const positionalPrior = Math.min(7, PERSONALITIES.shark.vpipTierByPosition[view.position] + (projection.effectiveDepthBB <= 5 ? 1 : 0));
+  const positionalPrior = PERSONALITIES.shark.vpipTierByPosition[view.position];
+  // The 6-max 100BB starting-hand priors below say nothing about push/fold depths or heads-up ranges.
+  if (view.phase === 'preflop' && action.type !== 'check' && (projection.effectiveDepthBB <= 25 || view.publicPlayers.length < 3)) {
+    return verdict('uncertain', 'range-model', 'Short-stacked or heads-up preflop: push/fold EV needs opponent calling ranges, which this grader does not model.');
+  }
   if (action.type === 'raise') {
     const ratio = grade.facts.matchedRaiseIncrement / Math.max(1, view.pot + view.toCall);
     const forced = legal.raise!.minTo === legal.raise!.maxTo;
@@ -205,7 +221,7 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
     if (view.phase === 'preflop') {
       if (!minimumRaise &&
         !forced &&
-        projection.effectiveDepthBB > 20 &&
+        projection.effectiveDepthBB > 40 && // re-jamming over an open is standard up to ~40BB
         tier >= 3 &&
         grade.facts.matchedAdded > Math.max(10 * view.bigBlind, view.myStack * 0.5)) {
         return verdict(
@@ -215,7 +231,7 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
           'WILD_RAISE',
         );
       }
-      if (!minimumRaise && !forced && view.currentBet > view.bigBlind && matchedTo > 5 * view.currentBet && tier >= 2) {
+      if (!minimumRaise && !forced && projection.effectiveDepthBB > 40 && view.currentBet > view.bigBlind && matchedTo > 5 * view.currentBet && tier >= 2) {
         return verdict(
           'minor',
           'sizing-model',
@@ -231,8 +247,7 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
           'LOOSE_PREFLOP',
         );
       }
-      const typicalSize = projection.effectiveDepthBB <= 10
-        || (view.currentBet <= view.bigBlind && matchedTo <= 5 * view.bigBlind)
+      const typicalSize = (view.currentBet <= view.bigBlind && matchedTo <= 5 * view.bigBlind)
         || (view.currentBet > view.bigBlind && matchedTo <= 4 * view.currentBet);
       if (tier <= positionalPrior && typicalSize) {
         return verdict(
@@ -243,7 +258,7 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
       }
     } else {
       const info = postflopStrength(view.holeCards, view.board);
-      if (!forced && info.madeCategory <= 3 && ratio < 0.1) {
+      if (!forced && info.madeCategory <= 3 && info.strength >= 0.85 && ratio < 0.1) { // flush or better that really stands on this board (no draw bonus at category <= 3)
         return verdict(
           'minor',
           'sizing-model',
@@ -251,11 +266,11 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
           'SIZING',
         );
       }
-      if (view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd') && ratio >= 0.25 && ratio <= 1.2) {
+      if (view.board.length < 5 && (info.flushDraw || info.straightDraw === 'oesd' || info.straightDraw === 'double-gutshot') && ratio >= 0.25 && ratio <= 1.2) {
         return verdict(
           'good',
           'sizing-model',
-          `A genuine personal ${info.flushDraw ? 'flush draw' : 'open-ended straight draw'} supports a plausible semi-bluff size. Fold equity and action EV are not proven.`,
+          `A genuine personal ${info.flushDraw ? 'flush draw' : info.straightDraw === 'oesd' ? 'open-ended straight draw' : 'double-gutshot straight draw'} supports a plausible semi-bluff size. Fold equity and action EV are not proven.`,
         );
       }
       const cbet = view.phase === 'flop' && view.iAmLastAggressor && !view.publicHistory.some(a => a.street === view.phase && a.type === 'raise') && view.toCall === 0;
@@ -267,7 +282,7 @@ export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade
           'A plausible AK continuation bet with real preflop initiative; fold equity is an explicit unmeasured assumption.',
         );
       }
-      if (info.strength >= 0.6 && ratio >= 0.2 && ratio <= 1.5) {
+      if (info.strength >= 0.6 && grade.model!.showdownEquity >= 0.5 && ratio >= 0.2 && ratio <= 1.5) {
         return verdict(
           'good',
           'sizing-model',
