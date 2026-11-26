@@ -15,7 +15,7 @@ vi.mock('../store/gameStore', async (original) => {
 function fixture() {
   const tournament = createTournament(Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, name: `Player ${i}`, isHero: i === 0 })), 0, 'ui');
   const seats: SeatView[] = tournament.players.map((p) => ({
-    ...p, avatar: '', personalityTagline: null, streetBet: 0, folded: false, allIn: false,
+    ...p, avatar: '', personalityTagline: null, position: null, streetBet: 0, committed: 0, folded: false, allIn: false,
     holeCards: null, hasCards: false, isButton: p.seatIndex === 0, isActing: false,
     lastAction: null, showdownDescription: null, wonAmount: null, eliminated: false,
   }));

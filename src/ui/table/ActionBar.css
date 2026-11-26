@@ -120,31 +120,17 @@
   border-color: var(--brass-bright);
 }
 
-@media (max-width: 700px) {
-  .action-bar {
-    flex-direction: column;
-    gap: 10px;
-    min-height: 0;
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-  }
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
 
-  .action-bar--waiting {
-    min-height: 44px;
-  }
-
-  .action-buttons {
-    width: 100%;
-    gap: 8px;
-  }
-
-  .btn {
-    flex: 1;
-    min-width: 0;
-    padding: 13px 6px;
-    font-size: 14px;
-  }
-
-  .raise-controls {
-    width: 100%;
-  }
+.lock-hint {
+  /* Takes the raise controls' slot while locked, so the bar keeps its layout. */
+  width: min(340px, 30vw);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--cream-dim);
 }

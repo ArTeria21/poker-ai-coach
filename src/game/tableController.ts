@@ -1,6 +1,6 @@
 import { gradeDecision, type DecisionGrade } from '../analysis/gradeHand';
 import type { GameState, PlayerAction } from '../engine/types';
-import { totalPot } from '../engine/types';
+import { positionOfSeat, totalPot } from '../engine/types';
 import type { HandEvent } from '../engine/events';
 import { applyAction, startHand } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
@@ -317,7 +317,9 @@ export class TableController {
         avatar: player.isHero ? '🧑' : personality!.avatar,
         personalityTagline: personality?.tagline ?? null,
         stack: p?.stack ?? player.stack,
+        position: p ? positionOfSeat(st, p.seatIndex) : null,
         streetBet: p?.streetBet ?? 0,
+        committed: p ? p.totalCommitted + (p.seatIndex === st.bigBlindIndex ? st.antePot : 0) : 0,
         folded: p?.folded ?? false,
         allIn: st.phase !== 'complete' && (p?.allIn ?? false),
         holeCards: p && (p.isHero || revealed) ? p.holeCards : null,
@@ -330,16 +332,30 @@ export class TableController {
         eliminated: player.place !== null && player.stack === 0,
       };
     });
+    const sb = st.smallBlindIndex === null ? null : st.players[st.smallBlindIndex];
+    const bb = st.players[st.bigBlindIndex];
+    const forcedBets: GameViewState['forcedBets'] = [
+      ...(sb ? [{ playerId: sb.id, kind: 'small blind' as const, amount: Math.min(st.config.smallBlind, sb.startingStack) }] : []),
+      { playerId: bb.id, kind: 'big blind', amount: Math.min(st.config.bigBlind, bb.startingStack) },
+      ...(st.antePot > 0 ? [{ playerId: bb.id, kind: 'big blind ante' as const, amount: st.antePot }] : []),
+    ];
+    const handActions = st.actionHistory.map((a) => ({
+      playerId: st.players[a.seatIndex].id, type: a.type, street: a.street, amountAdded: a.amountAdded,
+      toStreetBet: a.toStreetBet, potBefore: a.potBefore, toCallBefore: a.toCallBefore, stackBefore: a.stackBefore,
+    }));
     const complete = tournament.players.filter((p) => p.stack > 0).length === 1 && tournament.pendingHandId === null;
     useGameStore.getState().publish({
       tournament,
       latestDecisionGrade: this.latestDecisionGrade,
+      handId: st.handId,
       handNumber: this.handNumber,
       phase: st.phase,
       seats,
       board: [...st.board],
       pot: totalPot(st),
       currentBet: st.currentBet,
+      forcedBets,
+      handActions,
       bigBlind: st.config.bigBlind,
       status: complete ? 'tournamentComplete' : st.phase === 'complete' ? 'handComplete' : 'playing',
       banner: st.phase === 'complete' ? this.banner : null,

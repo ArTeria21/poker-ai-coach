@@ -1,4 +1,4 @@
-.app { display: flex; flex-direction: column; height: 100%; }
+.app { display: flex; flex-direction: column; height: 100%; min-width: 1024px; }
 .header { display: flex; align-items: center; gap: 22px; padding: 14px 24px; border-bottom: 1px solid #e9c88020; background: #0a0d0a99; }
 .brand { display: flex; align-items: baseline; gap: 9px; white-space: nowrap; }
 .brand-suit { color: var(--brass); font-size: 22px; }
@@ -14,14 +14,18 @@
 .sound-toggle, .new-tournament { border: 1px solid #e9c88040; border-radius: 7px; padding: 6px 10px; color: var(--cream); background: #1b231a; white-space: nowrap; }
 .new-tournament { font-weight: 700; font-size: 12px; }
 button:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 3px; }
-.main-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); flex: 1; min-height: 0; }
-.play-column { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.main-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; }
+.play-column { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .hand-log { display: flex; flex-direction: column; flex: 0 0 108px; min-height: 0; padding: 10px 22px 8px; background: #090c0980; border-bottom: 1px solid #e9c88018; }
 .hand-log-title, .panel-kicker { color: var(--brass); font-size: 10px; text-transform: uppercase; letter-spacing: .22em; font-weight: 700; }
 .hand-log-body { overflow-y: auto; font-size: 11px; line-height: 1.5; color: var(--cream-dim); margin-top: 5px; }
 .log-line--hand, .log-line--win { color: var(--brass-bright); }
-.tournament-panel { overflow-y: auto; border-left: 1px solid #e9c88020; padding: 25px 28px; background: #090c0980; }
-.tournament-panel h2 { margin: 8px 0 20px; font-family: var(--font-display); font-size: 28px; font-weight: 600; }
+.tournament-panel { position: relative; flex: none; background: #090c0980; border-bottom: 1px solid #e9c88018; }
+.tournament-panel > summary { padding: 8px 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; font-family: var(--font-mono); font-size: 11px; color: var(--cream-dim); }
+.tournament-panel > summary .panel-kicker { margin: 0 8px 0 4px; }
+/* Expanded details overlay the table instead of pushing it down. */
+.tournament-body { position: absolute; top: 100%; left: 0; right: 0; z-index: 20; max-height: calc(100vh - 270px); overflow-y: auto; padding: 6px 28px 10px; background: #0b0e0cf5; border-bottom: 1px solid #e9c88030; box-shadow: 0 16px 40px #0009; }
+.tournament-panel h2 { margin: 8px 0 12px; font-family: var(--font-display); font-size: 24px; font-weight: 600; }
 .tournament-section { padding: 20px 0; border-top: 1px solid #e9c88024; }
 .tournament-section h3 { margin: 0 0 12px; font-size: 13px; color: var(--cream); }
 .section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
@@ -47,28 +51,9 @@ button:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px 
   .header { gap: 12px; padding: 10px 16px; }
   .header-controls { gap: 8px; }
   .segmented-label { display: none; }
-  .main-row { grid-template-columns: minmax(0, 3fr) minmax(290px, 2fr); }
-  .tournament-panel { padding: 20px; }
-  .action-bar { flex-wrap: wrap; gap: 10px; }
-  .raise-controls { width: min(400px, 100%); }
+  /* reserve the wrapped (hero-to-act) height so the table does not jump between turns */
+  .action-bar { flex-wrap: wrap; gap: 10px; min-height: 137px; }
+  .raise-controls, .lock-hint { width: min(400px, 100%); }
 }
-@media (max-width: 850px) {
-  .app { overflow-y: auto; }
-  .header { flex-wrap: wrap; }
-  .header-meta { margin-left: auto; flex: initial; }
-  .header-controls { width: 100%; justify-content: space-between; }
-  .brand h1 { font-size: 19px; }
-  .main-row { display: flex; flex-direction: column; flex: initial; }
-  .play-column { min-height: 740px; }
-  .tournament-panel { overflow: visible; border-left: 0; border-top: 1px solid #e9c88020; }
-}
-@media (max-width: 700px) {
-  .header { padding: 10px 12px; }
-  .meta-item { font-size: 9px; }
-  .segmented-opt { font-size: 10px; padding: 5px 7px; }
-  .header-controls { gap: 6px; flex-wrap: wrap; justify-content: flex-start; }
-  .new-tournament { font-size: 11px; }
-  .hand-log { flex-basis: 95px; padding: 9px 12px; }
-  .play-column { height: 800px; min-height: 800px; }
-  .tournament-panel h2 { font-size: 25px; }
-}
+/* Must follow the base .hand-log rule above; a short window needs the height for the table. */
+@media (max-height: 720px) { .hand-log { flex-basis: 72px; } }

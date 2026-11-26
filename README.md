@@ -1,21 +1,34 @@
 # Poker AI-Coach
 
-A browser-based, six-player No-Limit Hold'em single-table tournament against five bots. The current implementation includes tournament rules, public opponent-range modeling, poker math and exact ICM tools, Monte Carlo decisions on hard difficulty, and a per-decision grader. The conversational AI coach and training workflow are future stages described in [PROJECT.md](PROJECT.md).
+A browser-based, six-player No-Limit Hold'em single-table tournament against five bots. The current implementation includes tournament rules, public opponent-range modeling, poker math and exact ICM tools, Monte Carlo decisions on hard difficulty, a per-decision grader, and a chat with coach Dan (`POST /api/chat`: OpenRouter model, math tools, public table snapshot) in two modes: Free Play and Training (see [Training Mode](#training-mode) and [PROJECT.md](PROJECT.md)).
 
 The table opens automatically. Play your actions, then choose **Deal next hand** when ready. If you are eliminated, you can continue watching the remaining players. **New SNG** starts a fresh tournament. The tournament stays in memory; refreshing the page starts again.
 
 ## Run locally
 
+Requires Node.js 22.9 or newer.
+
 ```sh
 npm install
-npm run dev
+npm run dev            # API on :8787 (tsx watch) + Vite web app; Vite proxies /api
 ```
 
 ```sh
 npm test
 npm run build
-npm run preview
+npm start              # production: one server for the built dist/ and /api on PORT (default 8787)
 ```
+
+The coach chat needs an OpenRouter key; the game itself runs without any credentials (`/api/chat` then answers 503). Answer time depends on `OPENROUTER_MODEL`: reasoning models may take ~15–60 s per answer (Dan shows progress meanwhile).
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENROUTER_API_KEY` | OpenRouter API key, server side only |
+| `OPENROUTER_MODEL` | OpenRouter model id, e.g. a tool-calling chat model; no default |
+| `PORT` | Server port, default 8787 |
+| `HOST` | Listen address, default `127.0.0.1` (the Docker image sets `0.0.0.0`) |
+
+`npm run dev:api` and `npm start` load `.env` if it exists (Node's `--env-file-if-exists`). Docker: `docker build -t poker-coach . && docker run -p 127.0.0.1:8080:80 -e OPENROUTER_API_KEY=... -e OPENROUTER_MODEL=... poker-coach`.
 
 ## Tournament format
 
@@ -50,18 +63,33 @@ The level lengths, blind schedule, full BBA heads-up, payouts, and application o
 
 ## Current interface
 
-The hand log sits above the table; action controls sit below it. The right panel shows the current level, ante, remaining players, prize shares, and standings. All six physical seats remain visible after elimination, including a dead dealer button. Folded bot cards stay hidden unless the bot voluntarily shows its winning hand; showdown cards are revealed by the engine.
+Desktop and tablet-landscape browsers only (the layout keeps a 1024 px minimum width; there is no phone layout). The left three fifths are the play column: a one-line tournament summary (players left, level, blinds and ante, hands at the level, prize shares) that expands into the full panel with standings and the blind schedule, the hand log, the table, and the action controls. The right two fifths are the chat with coach Dan.
+
+The chat header switches between **Free** (Free Play, the default) and **Training**; the choice is remembered. In Free Play the LLM is called only when you send a message (or click one of the example questions); silent play never calls it. Each send or retry attaches the current public table snapshot and only the last 20 messages. Dan's answer streams in as plain text; his math tool calls appear as compact chips (equity, pot odds, outs, ICM, combos) with their key result. "Dan is thinking…" shows whenever he is working without streaming text (before the first text and between tool steps), Stop cancels an answer, and an error line with Retry shows the server's message (for example when the coach is not configured). Chat history lives in memory only: a page refresh clears it, New SNG does not. All six physical seats remain visible after elimination, including a dead dealer button. Folded bot cards stay hidden unless the bot voluntarily shows its winning hand; showdown cards are revealed by the engine.
 
 The five bots retain their personalities and easy/medium/hard settings. All difficulties use a positional push/fold heuristic at effective depths up to 10 BB. Hard decisions facing a raised preflop price or a postflop bet use 1,000 Monte Carlo samples against public modeled ranges, with shared side-pot accounting. Continuation bets, semi-bluffs and personality tendencies remain heuristic. Bots use no LLM. The old curriculum, live template coach, stats, replay UI, post-hand review, summary modal, and automatic cash-table rebuy are removed.
 
 Every accepted human action also produces a compact `latestDecisionGrade` in the game store. It is preserved during bot responses and cleared on the next hand or session reset. This groundwork is available to the future trainer; the table does not restore a review or coaching panel.
+
+## Training Mode
+
+Dan leads the hands and the table waits for him at the moments worth discussing. Each lock belongs to one gate: a hero decision (`<handId>#<number of public actions so far>`) or the review of a finished hand (`<handId>#review`).
+
+- **Hero's turn.** The action buttons lock and the app sends Dan an automatic turn (shown in the chat as a compact event line, e.g. "Your turn · flop — discussing with Dan"). A deterministic preflop filter (`obviousPreflopSpot` in `src/agent/training.ts`) skips obvious junk folds when the hand is not yet substantive: no lock, no request, Fold is available at once.
+- **Release.** Dan unlocks with the `release_actions` tool once the discussion is done; the chat shows "Actions unlocked" / "Next hand unlocked". After a release every legal action is available, not just the one agreed on; Dan sees the real action next time.
+- **Review.** When a substantive hand ends (a gate opened, you put chips in voluntarily, or you chatted during the hand) and you were dealt in, **Deal next hand** locks until Dan's review releases it.
+- **Stale answers.** The server builds `release_actions` per request with that request's gate; the client unlocks only if the released id equals the gate locked now, so a late answer can never unlock a different decision.
+- **Busy chat.** A trigger that fires while Dan is still answering waits and is sent once he finishes, only if its gate is still locked.
+- **Recovery.** If a request fails, or you press Stop, while its gate is still locked, the chat shows Retry and **Continue without Dan**, which releases exactly that request's gate. Otherwise the lock holds until Dan releases it: answer him in the chat, or switch to Free Play. Switching to Free Play always unlocks; switching to Training mid-decision starts at the next trigger.
+
+The state machine (`step` in `src/agent/training.ts`) is pure; `src/ui/coachSession.ts` holds the shared `Chat` instance and feeds it table and chat events.
 
 ## Architecture and checks
 
 - `src/engine/`: deterministic NLHE hands, legal actions, separate BBA accounting, side pots, evaluation, and pure replay. A hand is reproducible from its configuration, seed, and actions.
 - `src/game/tournament.ts`: pure tournament lifecycle, physical markers, blind levels, eliminations, and prize shares.
 - `src/game/tableController.ts`: paced play, human/bot turns, cancellation, and public snapshots.
-- `src/store/` and `src/ui/`: Zustand snapshots and React UI. Private deck and hidden bot cards do not enter the UI store.
+- `src/store/` and `src/ui/`: Zustand snapshots and React UI; `ui/CoachChat.tsx` is the chat (`@ai-sdk/react` `useChat` over one module-level `Chat` in `ui/coachSession.ts`, which also wires Training Mode). Private deck and hidden bot cards do not enter the UI store.
 - `src/bots/`: sanitized decision views, a shared public opponent-range model and deterministic policies. Views contain the acting player's cards and copied public players/history; they exclude the deal seed, deck and hidden opponent cards.
 - `src/equity/`: range expansion, weighted joint Monte Carlo sampling, integer side-pot/odd-chip awards, a worker client with explicit errors, and the shared capped-call decision projection.
 - `src/math/`: structural draw completions, pot odds, effective cover, SPR, explicit terminal EV models, exact 1–6-player ICM, settled-outcome prize EV and matched-risk bubble factors.
@@ -69,7 +97,10 @@ Every accepted human action also produces a compact `latestDecisionGrade` in the
 
 Tests cover evaluator cross-checks, betting rules, chip conservation, ante and side-pot fixtures, replay, dead-button/HU positions, tournament payouts, completed SNGs, exact range/joint sampling oracles, known blockers, worker failures, ICM invariants, public-information isolation, hard bot behavior, grading uncertainty, live/replay equivalence and controller cancellation/restarts.
 
-The stack is TypeScript, React, Vite, Zustand, `phe`, Vitest, and fast-check. No backend or credentials are needed for the current SNG.
+- `src/agent/`: the coach contract. `coachSnapshot(view)` maps the sanitized store view to `CoachSnapshot` (public table state only); `coachSnapshotSchema` validates it on the server.
+- `server/`: Hono on Node via `tsx`. `app.ts` serves `POST /api/chat`: body-size limit, UI-message and snapshot validation, a sliding window of recent messages, and a Vercel AI SDK `streamText` call to OpenRouter with a multi-step tool loop, streamed back as a UI message stream. `dan.ts` is coach Dan's system prompt (the latest snapshot is appended as JSON). `tools.ts` exposes deterministic math tools over `src/math` and `src/equity`: `equity`, `range_combos`, `pot_odds`, `outs`, `icm`; invalid input returns `{ error }` to the model. `release_actions` exists only in a Training request that carries a locked gate (the server checks the gate against the snapshot). `index.ts` serves the app and the built `dist/`.
+
+The stack is TypeScript, React, Vite, Zustand, `phe`, Vitest, fast-check, Hono, the Vercel AI SDK and OpenRouter. Only the coach chat needs credentials.
 
 ## Math and grading APIs
 
@@ -81,7 +112,7 @@ The stack is TypeScript, React, Vite, Zustand, `phe`, Vitest, and fast-check. No
 - `icmEquities` computes exact independent-chip prize shares. A single zero stack receives the next remaining bottom-place payout. Multiple zero stacks require explicit best-to-worst `eliminationGroups`; tied groups split their occupied payouts. `icmOutcomeEV` weights separately supplied settled outcomes, including ties, while conserving chips exactly. Fractional showdown equity is not treated as a win probability. `bubbleFactor` evaluates matched symmetric chip transfers without a dead pot; equal prizes produce an undefined factor, and numerically unresolved ratios report `precision-limit`.
 - `gradeDecision(view, action)` calculates its own shared call model with a deterministic public-identity seed and 1,000 iterations. `gradeHand` and `gradeHandFromSteps` use that same function before every hero action. A 95% bounded-award Hoeffding band covers sampling uncertainty only; it does not quantify range-model error. Terminal conclusions use that ICM prize EV (with its own Hoeffding band) when it exists, otherwise chip EV (with two players left, chip EV sign is the prize EV sign; heads-up blunder severity stays in chips); multiway terminal tournament pots with three or more players left are `uncertain`, and nothing claims GTO. A fold despite a positive modeled call remains uncertain: the grader does not assert fold errors from heuristic opponent ranges. Price facts use net call cost divided by eligible pot awards, excluding inaccessible side pots and refunds; this required award share must not be compared directly with whole-field showdown equity. Nonterminal equity does not establish action EV, raise sizes use only matched exposure, and plausible continuation bets/semi-bluffs remain model judgments. Near-zero bands, unresolved betting, exhausted sampling, and nonterminal preflop calls, raises and folds facing a bet at 25BB effective or less or in hands dealt heads-up (6-max starting-hand priors do not apply there), produce an explicit `uncertain` verdict.
 
-The conversational trainer, action-lock training mode, long-term memory, voice input and backend remain future work. No credentials are needed for the current implementation.
+Long-term memory, dialog compaction and voice input remain future work.
 
 ## License and origin
 

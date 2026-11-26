@@ -522,138 +522,21 @@
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-@media (max-width: 900px) {
-  .card--board { width: 52px; height: 76px; }
-  .board-slot { width: 52px; height: 76px; }
-  .seat-pod { min-width: 120px; }
+/* narrow desktop / tablet landscape (1024–1200 px): the play column is ~600 px wide,
+   so a taller oval and smaller board keep seat plates off the pot and bet pills */
+@media (max-width: 1200px) {
+  .table-oval { aspect-ratio: 2 / 1.4; }
+  .card--board, .board-slot { width: 52px; height: 75px; }
+  .table-center { gap: 8px; }
+  .bet-spot--pos2 { left: 29%; }
+  .bet-spot--pos4 { left: 71%; }
 }
 
-/* ------------------------------------------------- phones: tall table */
-
-@media (max-width: 700px) {
-  .table-zone {
-    padding: 26px 6px 6px;
-    /* clip seat-pod overhang so it can never create horizontal scroll */
-    overflow: hidden;
-  }
-
-  /* a wide oval can't fit a portrait phone — stand it upright */
-  .table-oval {
-    width: min(100%, 380px);
-    height: auto;
-    aspect-ratio: 1 / 1.35;
-    max-height: none;
-  }
-
-  .table-rail {
-    box-shadow:
-      0 16px 40px rgba(0, 0, 0, 0.6),
-      inset 0 2px 3px rgba(255, 230, 180, 0.18),
-      inset 0 -6px 18px rgba(0, 0, 0, 0.7);
-  }
-
-  .table-felt {
-    inset: 14px;
-  }
-
-  .table-felt::before {
-    font-size: 9px;
-    letter-spacing: 0.4em;
-    top: 72%;
-  }
-
-  .table-felt::after {
-    inset: 10%;
-  }
-
-  /* seats around the tall ellipse, hero at the bottom — side seats sit
-     further in than on desktop so pods stay fully on-screen */
-  .seat--pos0 { left: 50%; top: 96%; }
-  .seat--pos1 { left: 20%; top: 77%; }
-  .seat--pos2 { left: 19%; top: 27%; }
-  .seat--pos3 { left: 50%; top: 3%; }
-  .seat--pos4 { left: 81%; top: 27%; }
-  .seat--pos5 { left: 80%; top: 77%; }
-
-  .bet-spot--pos0 { left: 50%; top: 76%; }
-  .bet-spot--pos1 { left: 30%; top: 66%; }
-  .bet-spot--pos2 { left: 30%; top: 36%; }
-  .bet-spot--pos3 { left: 50%; top: 15%; }
-  .bet-spot--pos4 { left: 70%; top: 36%; }
-  .bet-spot--pos5 { left: 70%; top: 66%; }
-
-  .seat-pod {
-    min-width: 0;
-    gap: 7px;
-    padding: 4px 11px 5px 5px;
-  }
-
-  .seat-avatar {
-    width: 30px;
-    height: 30px;
-    font-size: 16px;
-  }
-
-  .seat-name {
-    font-size: 10.5px;
-    max-width: 76px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .seat-stack {
-    font-size: 11.5px;
-  }
-
-  .seat-cards {
-    margin-bottom: -11px;
-  }
-
-  .seat--pos0 .seat-cards {
-    margin-bottom: -9px;
-  }
-
-  .card--hole { width: 42px; height: 60px; }
-  .card--hole .card-corner b { font-size: 12px; }
-  .card--hole .card-corner i { font-size: 9px; }
-  .card--hole .card-pip { font-size: 18px; }
-  .card--mini { width: 27px; height: 39px; border-radius: 4px; }
-  .card--mini .card-corner b { font-size: 9.5px; }
-  .card--mini .card-corner i { font-size: 7px; }
-  .card--mini .card-pip { font-size: 12px; }
-
-  .card--board,
-  .board-slot { width: 42px; height: 61px; border-radius: 6px; }
-  .card--board .card-corner b { font-size: 13px; }
-  .card--board .card-corner i { font-size: 10px; }
-  .card--board .card-pip { font-size: 20px; }
-
-  .board-row { gap: 5px; }
-  .table-center { gap: 8px; top: 45%; }
-
-  .pot-pill { padding: 3px 12px 4px; gap: 6px; }
-  .pot-pill .pot-amount { font-size: 14px; }
+/* short viewports (1024x768 screens minus browser chrome): lift the center and the top seat apart */
+@media (max-height: 720px) {
   .phase-tag { display: none; }
-
-  .bet-chip { font-size: 11px; padding: 2px 8px 3px; }
-  .bet-chip .bet-action { font-size: 8px; }
-  .dealer-button { width: 17px; height: 17px; font-size: 9px; }
-
-  .seat-descr { font-size: 8.5px; padding: 1px 8px; }
-  .seat-won { font-size: 12px; }
-  .seat-quip { max-width: 140px; font-size: 10.5px; padding: 5px 9px 6px; }
-
-  .result-banner {
-    top: 15%;
-    width: 88%;
-    white-space: normal;
-    text-align: center;
-    font-size: 13px;
-    padding: 8px 14px 9px;
-  }
-
-  .result-banner::before,
-  .result-banner::after {
-    display: none;
-  }
+  .table-center { top: 47%; }
+  .card--board, .board-slot { width: 44px; height: 63px; }
+  .seat--pos3 { top: -4%; }
+  .bet-spot--pos3 { left: 62%; top: 13%; }
 }

@@ -1,6 +1,7 @@
 import type { Card, PlayerAction, Street } from '../engine/types';
 import type { HandRecord, ReplayStep } from '../engine/replay';
 import { replayHand } from '../engine/replay';
+import { hashSeed } from '../engine/rng';
 import { buildBotView, type BotView } from '../bots/botDecision';
 import { handTier, handLabel } from '../bots/preflopTiers';
 import { PERSONALITIES } from '../bots/personalities';
@@ -61,11 +62,7 @@ export interface HandGrade {
 const ITERATIONS = 1000;
 
 /** Same public decision identity and sampling budget for live and replay; never uses the deal seed. */
-function decisionSeed(view: BotView): number {
-  let hash = 2166136261;
-  for (const c of `${view.handId}:${view.decisionIndex}:${view.seatIndex}`) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
-  return hash >>> 0;
-}
+const decisionSeed = (view: BotView) => hashSeed(`${view.handId}:${view.decisionIndex}:${view.seatIndex}`);
 
 export function gradeHand(record: HandRecord, heroSeatIndex: number): HandGrade {
   return gradeHandFromSteps(record.handId, replayHand(record).steps, heroSeatIndex);

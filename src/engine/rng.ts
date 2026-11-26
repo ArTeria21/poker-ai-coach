@@ -33,3 +33,10 @@ export function shuffleInPlace<T>(arr: T[], rng: Rng): T[] {
   }
   return arr;
 }
+
+/** FNV-1a 32-bit hash of a string, for deterministic seeds derived from public inputs. */
+export function hashSeed(text: string): number {
+  let hash = 2166136261;
+  for (const c of text) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+  return hash >>> 0;
+}

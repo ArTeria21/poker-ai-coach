@@ -45,7 +45,8 @@ body {
     var(--room-0);
   color: var(--cream);
   font-family: var(--font-ui);
-  overflow: hidden;
+  /* desktop-only layout: below the app min-width, scroll sideways instead of squeezing */
+  overflow: auto hidden;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -63,16 +64,6 @@ body::after {
 button {
   font-family: var(--font-ui);
   cursor: pointer;
-}
-
-/* phones: hard-lock the page so nothing can pan it sideways */
-@media (max-width: 700px) {
-  body {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    overscroll-behavior: none;
-  }
 }
 
 ::-webkit-scrollbar {

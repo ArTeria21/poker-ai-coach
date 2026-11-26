@@ -1,6 +1,6 @@
 import type { DecisionGrade } from '../analysis/gradeHand';
 import { create } from 'zustand';
-import type { ActionType, Card, GamePhase, LegalActions } from '../engine/types';
+import type { ActionType, Card, GamePhase, LegalActions, Position, PublicAction } from '../engine/types';
 import type { TournamentState } from '../game/tournament';
 
 /**
@@ -16,7 +16,11 @@ export interface SeatView {
   avatar: string;
   personalityTagline: string | null;
   stack: number;
+  /** Table position this hand; null when not dealt in. */
+  position: Position | null;
   streetBet: number;
+  /** Chips put into the pot this hand, including the big blind ante. */
+  committed: number;
   folded: boolean;
   allIn: boolean;
   /** Visible cards: hero always; bots only after a public reveal. */
@@ -32,12 +36,24 @@ export interface SeatView {
   eliminated: boolean;
 }
 
+/** A public action of the current hand, keyed by player id (engine seat indexes are hand-local). */
+export type HandAction = Omit<PublicAction, 'seatIndex' | 'amount'> & { playerId: string };
+
+/** Blinds and ante actually posted this hand (a short stack may post less than the level). */
+export interface ForcedBet {
+  playerId: string;
+  kind: 'small blind' | 'big blind' | 'big blind ante';
+  amount: number;
+}
+
 export type TableStatus = 'idle' | 'playing' | 'handComplete' | 'tournamentComplete';
 
 export interface GameViewState {
   /** Settled/prehand stacks and standings, no private cards; live stacks are in seats. */
   tournament: TournamentState | null;
   status: TableStatus;
+  /** Engine hand id `<tournamentId>-hand-N`: public, seed-free. */
+  handId: string | null;
   handNumber: number;
   phase: GamePhase | null;
   seats: SeatView[];
@@ -45,6 +61,8 @@ export interface GameViewState {
   pot: number;
   bigBlind: number;
   currentBet: number;
+  forcedBets: ForcedBet[];
+  handActions: HandAction[];
   /** Non-null exactly when the UI should show the action bar. */
   heroLegal: LegalActions | null;
   /** Latest accepted hero decision; compact public math/model evidence, no hidden hands or range arrays. */
@@ -62,6 +80,7 @@ export interface GameViewState {
 const initialState: GameViewState = {
   tournament: null,
   status: 'idle',
+  handId: null,
   handNumber: 0,
   phase: null,
   seats: [],
@@ -69,6 +88,8 @@ const initialState: GameViewState = {
   pot: 0,
   bigBlind: 20,
   currentBet: 0,
+  forcedBets: [],
+  handActions: [],
   heroLegal: null,
   latestDecisionGrade: null,
   awaitingNext: false,

@@ -3,29 +3,36 @@ import { useGameStore } from '../store/gameStore';
 import { useSettingsStore, type GameSpeed } from '../store/settingsStore';
 import { tableController } from '../game/tableController';
 import type { Difficulty } from '../bots/personalities';
-import { BLIND_LEVELS } from '../game/tournament';
 import { PokerTable } from './table/PokerTable';
 import { ActionBar } from './table/ActionBar';
 import { TournamentPanel } from './TournamentPanel';
+import { CoachChat } from './CoachChat';
+import { Segmented } from './Segmented';
+import { connectTraining } from './coachSession';
 import './App.css';
 
 export function App() {
   const tournament = useGameStore((s) => s.tournament);
   const seats = useGameStore((s) => s.seats);
   useEffect(() => {
+    const disconnect = connectTraining();
     tableController.startSession();
-    return () => tableController.stop();
+    return () => {
+      tableController.stop();
+      disconnect();
+    };
   }, []);
   return (
     <div className="app">
       <Header />
       <main className="main-row">
         <div className="play-column">
+          {tournament && <TournamentPanel tournament={tournament} seats={seats} />}
           <HandLog />
           <PokerTable />
           <ActionBar />
         </div>
-        {tournament && <TournamentPanel tournament={tournament} seats={seats} />}
+        <CoachChat />
       </main>
     </div>
   );
@@ -33,20 +40,17 @@ export function App() {
 
 function Header() {
   const handNumber = useGameStore((s) => s.handNumber);
-  const tournament = useGameStore((s) => s.tournament);
   const difficulty = useSettingsStore((s) => s.difficulty);
   const speed = useSettingsStore((s) => s.speed);
   const soundEnabled = useSettingsStore((s) => s.soundEnabled);
   const setDifficulty = useSettingsStore((s) => s.setDifficulty);
   const setSpeed = useSettingsStore((s) => s.setSpeed);
   const setSoundEnabled = useSettingsStore((s) => s.setSoundEnabled);
-  const level = BLIND_LEVELS[tournament?.levelIndex ?? 0];
   return (
     <header className="header">
       <div className="brand"><span className="brand-suit">♠</span><h1>Poker AI-Coach</h1></div>
       <div className="header-meta">
         <span className="meta-item">6-max SNG · Hand #{handNumber || 1}</span>
-        <span className="meta-item">{level.smallBlind} / {level.bigBlind} · BBA {level.bigBlindAnte}</span>
       </div>
       <div className="header-controls">
         <Segmented label="Bots" value={difficulty} options={['easy', 'medium', 'hard'] as Difficulty[]} onChange={setDifficulty} />
@@ -57,19 +61,6 @@ function Header() {
         <button className="new-tournament" onClick={() => tableController.startSession()}>New SNG</button>
       </div>
     </header>
-  );
-}
-
-function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: T[]; onChange: (value: T) => void }) {
-  return (
-    <div className="segmented" role="group" aria-label={label}>
-      <span className="segmented-label">{label}</span>
-      <div className="segmented-options">
-        {options.map((option) => (
-          <button key={option} className={`segmented-opt${value === option ? ' segmented-opt--active' : ''}`} aria-pressed={value === option} onClick={() => onChange(option)}>{option}</button>
-        ))}
-      </div>
-    </div>
   );
 }
 
