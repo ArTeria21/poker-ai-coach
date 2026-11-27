@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { icmEquities } from '../src/math/icm';
 import { tools } from './tools';
 
 const run = async (name: keyof typeof tools, input: unknown) =>
@@ -22,6 +23,29 @@ describe('coach math tools', () => {
     expect(result.rangeCombos).toEqual([{ range: 'TT+, AQs+, AKo', combos: 24 + 5 + 9 }]);
     expect(result.equity).toBeGreaterThan(0.2);
     expect(result.equity).toBeLessThan(0.5);
+  });
+
+  it('shove_ev: EV versus folding at the decision, in chips and BB, with errors as { error }', async () => {
+    // SB 6 BB with blinds 50/100: 150 posted, the shove adds 550, the BB adds 500 to call.
+    expect(await run('shove_ev', { pot: 150, heroCost: 550, opponentCall: 500, foldProbability: 0.7, equityWhenCalled: 0.35, bigBlind: 100 }))
+      .toEqual({ evChips: 66, evBB: 0.66, assumption: expect.stringContaining('terminal') });
+    expect((await run('shove_ev', { pot: 150, heroCost: 550, opponentCall: 500, foldProbability: 1, equityWhenCalled: 0 })).evChips).toBe(150);
+    // Shorter caller: blinds 50/100 + BBA 100, BB 1000 at hand start has 800 behind; heroCost = his street bet after calling (900) - the SB's 50.
+    expect((await run('shove_ev', { pot: 250, heroCost: 850, opponentCall: 800, foldProbability: 0.5, equityWhenCalled: 0.4 })).evChips).toBe(80);
+    expect(await run('shove_ev', { pot: -1, heroCost: 550, opponentCall: 500, foldProbability: 0.7, equityWhenCalled: 0.35 })).toEqual({ error: expect.any(String) });
+  });
+
+  it('icm outcomes: ICM EV of a bubble shove versus the fold baseline', async () => {
+    // Blinds 50/100, hero SB 900 shoves into BB 1500, others 3000 and 600; BB folds 60%, hero has 40% when called.
+    const fold = [850, 1550, 3000, 600], steal = [1000, 1400, 3000, 600], win = [1800, 600, 3000, 600], lose = [0, 2400, 3000, 600];
+    const payouts = [0.5, 0.3, 0.2];
+    const result = await run('icm', { stacks: fold, payouts, hero: 0, outcomes: [{ probability: 0.6, stacks: steal }, { probability: 0.16, stacks: win }, { probability: 0.24, stacks: lose }] });
+    const eq = (stacks: number[]) => icmEquities(stacks, payouts)[0];
+    expect(result.delta).toBeCloseTo(0.6 * eq(steal) + 0.16 * eq(win) + 0.24 * eq(lose) - eq(fold), 4);
+    // Plus in chips, minus in prize equity: the bubble makes the shove a fold.
+    expect((await run('shove_ev', { pot: 150, heroCost: 850, opponentCall: 800, foldProbability: 0.6, equityWhenCalled: 0.4 })).evChips).toBe(38);
+    expect(result.delta).toBeLessThan(0);
+    expect(await run('icm', { stacks: fold, payouts, hero: 0, outcomes: [{ probability: 1, stacks: [0, 0, 0, 0] }] })).toEqual({ error: expect.stringMatching(/conserve chips/) });
   });
 
   it('range_combos applies blockers', async () => {

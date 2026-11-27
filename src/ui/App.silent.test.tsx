@@ -45,12 +45,14 @@ it('plays silently without calling the coach, and sends one request with the sna
     await tick();
   }
   expect(store().handNumber).toBeGreaterThanOrEqual(5);
-  expect(fetchSpy).not.toHaveBeenCalled();
+  // The chat mounts with one memory status check (no LLM); silent play adds nothing.
+  const chatCalls = () => fetchSpy.mock.calls.filter(([url]) => url !== '/api/memory/status');
+  expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual(['/api/memory/status']);
 
   await act(async () => container.querySelector<HTMLButtonElement>('.chat-example')!.click());
   await tick();
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  const [url, init] = fetchSpy.mock.calls[0];
+  expect(chatCalls()).toHaveLength(1);
+  const [url, init] = chatCalls()[0];
   expect(url).toBe('/api/chat');
   const body = JSON.parse(String(init?.body));
   expect(body.messages).toHaveLength(1);

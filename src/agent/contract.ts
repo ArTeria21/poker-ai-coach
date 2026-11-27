@@ -1,8 +1,34 @@
 import { z } from 'zod';
 import type { DecisionGrade } from '../analysis/gradeHand';
 
-/** shortcut: plain sliding window of chat messages sent to the model, older turns are dropped; upgrade to compaction when sessions get long. */
+/** Dialog compaction: once more than FOLD_AT chat messages are unfolded, all but the last WINDOW_MESSAGES fold into the session summary. */
 export const WINDOW_MESSAGES = 20;
+export const FOLD_AT = 30;
+/** Server cap on unfolded messages per chat request: the safety net while folding keeps failing. */
+export const MAX_UNFOLDED_MESSAGES = 40;
+export const SUMMARY_MAX_CHARS = 6000;
+
+/** The level diagnosis: the client's event message that starts it, and the stops of the confidence slider on its graded questions (raw probability the pick is correct; 50 is a genuine coin flip and the default). */
+export const DIAGNOSIS_PREFIX = '[Диагностика]';
+export const CONFIDENCE_STOPS = [0, 30, 50, 70, 90, 100] as const;
+
+/** The knowledge-map topic catalog: stable ids and Russian titles. */
+export const TOPICS = {
+  'positions-preflop': 'Позиции и префлоп-диапазоны',
+  'pot-odds': 'Шансы банка и требуемое эквити',
+  'outs-draws': 'Ауты и дро',
+  'equity-ranges': 'Эквити против диапазонов',
+  'bet-sizing': 'Размеры ставок',
+  'cbet-semibluff': 'Контбет и полублеф',
+  'spr-commitment': 'SPR и коммитмент',
+  'blind-defense': 'Защита блайндов',
+  'three-bet-steal': '3-бет и стил',
+  'push-fold': 'Пуш/фолд на коротком стеке',
+  'icm-bubble': 'ICM и игра на баббле',
+  'hand-reading': 'Чтение рук соперника',
+} as const;
+export type TopicId = keyof typeof TOPICS;
+export const TOPIC_IDS = Object.keys(TOPICS) as [TopicId, ...TopicId[]];
 
 /**
  * Public table snapshot handed to the coach LLM. Chip amounts are integers;

@@ -1,88 +1,27 @@
 // @vitest-environment happy-dom
+import { filter, dom, mockApi, streamed, tick, until, type Stream } from './appTestKit';
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-// Node's own experimental localStorage global (undefined without a file) shadows happy-dom's; the settings store persists to it.
-vi.hoisted(() => Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true }));
 import { App } from './App';
 import { chat, setTrainingMode, useTrainingStore } from './coachSession';
 import { decisionGateId, reviewGateId } from '../agent/training';
 import { useGameStore } from '../store/gameStore';
 import { useSettingsStore } from '../store/settingsStore';
 
-const filter = vi.hoisted(() => ({ obvious: false }));
-vi.mock('../agent/training', async (original) => ({
-  ...await original<typeof import('../agent/training')>(),
-  obviousPreflopSpot: () => filter.obvious,
-}));
-vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
-vi.mock('../bots/botDecision', async (original) => ({
-  ...await original<typeof import('../bots/botDecision')>(),
-  decideAction: vi.fn((view) => ({ action: { type: view.legal.check ? 'check' : 'call' }, trace: [] })),
-}));
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const store = () => useGameStore.getState();
-const tick = () => act(() => vi.advanceTimersByTimeAsync(300));
-async function until(cond: () => boolean) {
-  for (let i = 0; i < 200 && !cond(); i++) await tick();
-  expect(cond()).toBe(true);
-}
-
-/** A UI message stream as the server writes it (SSE), fed chunk by chunk. */
-function streamed() {
-  let ctl!: ReadableStreamDefaultController<string>;
-  const body = new ReadableStream<string>({ start: (c) => { ctl = c; } }).pipeThrough(new TextEncoderStream());
-  const send = (chunk: object) => ctl.enqueue(`data: ${JSON.stringify(chunk)}\n\n`);
-  send({ type: 'start' });
-  send({ type: 'start-step' });
-  let calls = 0;
-  return {
-    response: new Response(body, { headers: { 'content-type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } }),
-    release(gateId: string) {
-      // Per-response numbering, as providers do: ids repeat across turns.
-      const toolCallId = `call_${calls++}`;
-      send({ type: 'tool-input-available', toolCallId, toolName: 'release_actions', input: {} });
-      send({ type: 'tool-output-available', toolCallId, output: { released: gateId, kind: gateId.endsWith('#review') ? 'review' : 'decision' } });
-    },
-    fail() {
-      send({ type: 'error', errorText: 'Coach could not answer right now.' });
-      ctl.close();
-    },
-    end(text = 'Ок.') {
-      send({ type: 'text-start', id: 't' });
-      send({ type: 'text-delta', id: 't', delta: text });
-      send({ type: 'text-end', id: 't' });
-      send({ type: 'finish-step' });
-      send({ type: 'finish' });
-      ctl.enqueue('data: [DONE]\n\n');
-      ctl.close();
-    },
-  };
-}
-type Stream = ReturnType<typeof streamed>;
 
 let container: HTMLDivElement;
 let root: Root;
 let streams: Stream[];
-let fetchSpy: ReturnType<typeof mockFetch>;
-const mockFetch = () => vi.spyOn(globalThis, 'fetch');
-const bodies = () => fetchSpy.mock.calls.map(([, init]) => JSON.parse(String(init?.body)));
-const button = (text: string) => [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(text));
-const actionButtons = () => [...container.querySelectorAll<HTMLButtonElement>('.action-buttons .btn')];
-const locked = () => actionButtons().length > 0 && actionButtons().every((b) => b.disabled);
-const click = (text: string) => act(() => button(text)!.click());
-async function say(text: string) {
-  await act(async () => {
-    const textarea = container.querySelector<HTMLTextAreaElement>('textarea')!;
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, text);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await click('Send');
-}
+let api: ReturnType<typeof mockApi>;
+const chatCalls = () => api.chatCalls();
+const bodies = () => api.bodies();
+const { button, click, actionButtons, locked, say } = dom(() => container);
 /** Dan answers every decision trigger at once and releases it; other requests stay open. */
 function autoReleaseDecisions() {
-  fetchSpy.mockImplementation(async (_url, init) => {
+  api.spy.mockImplementation(async (url, init) => {
+    if (url === '/api/memory/status') return Response.json({ initialized: true });
     const s = streamed();
     streams.push(s);
     const gate = JSON.parse(String(init?.body)).gate;
@@ -120,11 +59,7 @@ beforeEach(async () => {
   setTrainingMode('free');
   filter.obvious = false;
   streams = [];
-  fetchSpy = mockFetch().mockImplementation(async () => {
-    const s = streamed();
-    streams.push(s);
-    return s.response;
-  });
+  api = mockApi(streams);
   container = document.body.appendChild(document.createElement('div'));
   root = createRoot(container);
 });
@@ -147,14 +82,14 @@ describe('Training Mode', () => {
     await click('Fold');
     await until(() => store().awaitingNext);
     expect(button('Deal next hand')!.disabled).toBe(false);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(chatCalls()).toHaveLength(0);
   });
 
   it('locks a real spot with one request for its gate; a stale release keeps it locked, the matching one unlocks any action', async () => {
     await startTraining();
     const key = heroKey();
     expect(locked()).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(chatCalls()).toHaveLength(1);
     expect(bodies()[0]).toMatchObject({ mode: 'training', gate: { id: key, kind: 'decision' }, snapshot: { handId: store().handId } });
     expect(container.querySelector('.chat-event')?.textContent).toMatch(/Your turn · preflop/);
 
@@ -168,7 +103,7 @@ describe('Training Mode', () => {
 
     await say('Рейз, сильная рука.');
     await tick();
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(chatCalls()).toHaveLength(2);
     expect(bodies()[1].gate).toEqual({ id: key, kind: 'decision' });
     streams[1].release(key);
     await tick();
@@ -184,7 +119,7 @@ describe('Training Mode', () => {
   });
 
   it('on an API error, "Continue without Dan" releases only the failed gate', async () => {
-    fetchSpy.mockResolvedValue(Response.json({ error: 'Coach could not answer' }, { status: 500 }));
+    api.spy.mockResolvedValue(Response.json({ error: 'Coach could not answer' }, { status: 500 }));
     await startTraining();
     expect(locked()).toBe(true);
     expect(container.querySelector('.chat-error')?.textContent).toContain('Coach could not answer');
@@ -199,7 +134,7 @@ describe('Training Mode', () => {
     await tick();
     expect(heroKey()).not.toBe(failed);
     expect(locked()).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(chatCalls()).toHaveLength(2);
     expect(bodies()[1].gate.id).toBe(heroKey());
   });
 
@@ -211,7 +146,7 @@ describe('Training Mode', () => {
     await passive();
     await until(() => store().heroLegal !== null || store().awaitingNext);
     expect(locked()).toBe(false);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(chatCalls()).toHaveLength(1);
   });
 
   it('locks "Deal next hand" for the review of a substantive hand until Dan releases it', async () => {
@@ -223,7 +158,7 @@ describe('Training Mode', () => {
     await until(() => store().awaitingNext);
     const review = reviewGateId(store().handId!);
     expect(button('Deal next hand')!.disabled).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(chatCalls()).toHaveLength(2);
     expect(bodies()[1].gate).toEqual({ id: review, kind: 'review' });
     expect(bodies()[1].snapshot.status).toBe('handComplete');
 
@@ -242,12 +177,12 @@ describe('Training Mode', () => {
     await until(() => store().heroLegal !== null);
     await tick();
     expect(locked()).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(chatCalls()).toHaveLength(1);
 
     streams[0].end();
     await tick();
     await tick();
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(chatCalls()).toHaveLength(2);
     expect(bodies()[1].gate.id).toBe(heroKey());
   });
 
@@ -264,7 +199,7 @@ describe('Training Mode', () => {
     streams[0].end();
     await tick();
     await tick();
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(chatCalls()).toHaveLength(1);
   });
 
   it('Stop leaves the gate locked and offers Retry and "Continue without Dan" until the next answer', async () => {
@@ -317,5 +252,23 @@ describe('Training Mode', () => {
     await until(() => store().awaitingNext);
     expect(button('Deal next hand')!.disabled).toBe(true);
     expect(bodies()[1].gate).toEqual({ id: reviewGateId(store().handId!), kind: 'review' });
+  });
+
+  it('does not reopen a finished hand for chat during the showdown pause', async () => {
+    filter.obvious = true;
+    await startTraining();
+    await click('Fold');
+    // The bots check it down; the hand is over on screen but not yet booked into the tournament.
+    // Five bots checking down at fast speed take up to ~14 s of fake time.
+    for (let i = 0; i < 2000 && !(store().phase === 'complete' && store().tournament!.pendingHandId !== null); i++) {
+      await act(() => vi.advanceTimersByTimeAsync(20));
+    }
+    expect(store().phase).toBe('complete');
+    expect(store().tournament!.pendingHandId).toBe(store().handId);
+    await say('Почему я сфолдил?');
+    await until(() => store().awaitingNext);
+    expect(button('Deal next hand')!.disabled).toBe(false);
+    expect(bodies()).toHaveLength(1);
+    expect(bodies()[0].gate).toBeNull();
   });
 });
