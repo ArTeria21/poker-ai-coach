@@ -24,6 +24,18 @@
   white-space: nowrap;
 }
 
+.brand--button {
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+}
+
+.brand--button:hover .brand-suit {
+  border-color: var(--color-mint-pulse);
+}
+
 .brand-suit {
   display: grid;
   place-items: center;

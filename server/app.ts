@@ -7,7 +7,7 @@ import { coachSnapshotSchema, DIAGNOSIS_PREFIX, MAX_UNFOLDED_MESSAGES, SUMMARY_M
 import { decisionGateId, reviewGateId, type GateKind, type Mode, type RequestGate } from '../src/agent/training';
 import { COMPACTION_INSTRUCTIONS, compactionPrompt, serializeSpan } from './compaction';
 import { danInstructions } from './dan';
-import { memoryInitialized, readInjectedMemory } from './memory';
+import { memoryInitialized, readInjectedMemory, readMemoryOverview } from './memory';
 import { diagnosisTools, memoryTools, releaseActions, tools } from './tools';
 import { transcribe } from './voice';
 
@@ -194,5 +194,6 @@ app.post(
 );
 
 app.get('/api/memory/status', async (c) => c.json({ initialized: await memoryInitialized() }));
+app.get('/api/memory', async (c) => c.json(await readMemoryOverview()));
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));

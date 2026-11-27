@@ -47,7 +47,7 @@ const heroKey = () => decisionGateId(store().handId!, store().handActions.length
 async function startTraining() {
   // Before the deal: a hero already to act when the mode switches is not locked (training starts at the next trigger).
   setTrainingMode('training');
-  await act(async () => root.render(<StrictMode><App /></StrictMode>));
+  await act(async () => root.render(<StrictMode><App initialView="table" /></StrictMode>));
   expect(button('training')!.getAttribute('aria-pressed')).toBe('true');
   await until(() => store().heroLegal !== null);
   await tick();
