@@ -1,4 +1,4 @@
-import type { BotView } from '../bots/botDecision';
+import type { DecisionView } from '../engine/decisionView';
 import { modelOpponentRanges } from '../bots/opponentRanges';
 import { buildPots } from '../engine/potManager';
 import { chipAmount } from '../math/pokerMath';
@@ -6,7 +6,7 @@ import { icmEquities, icmOutcomeEV } from '../math/icm';
 import { monteCarloEquity } from './monteCarlo';
 
 /** Public capped-call projection; no opponent action or future street is invented. */
-export function decisionFacts(view: BotView) {
+export function decisionFacts(view: DecisionView) {
   chipAmount(view.toCall, 'Call');
   if (view.toCall > view.myStack || view.bigBlind <= 0) throw new Error('Invalid call or blind');
   const hero = view.publicPlayers.find(p => p.seatIndex === view.seatIndex);
@@ -37,7 +37,7 @@ export function decisionFacts(view: BotView) {
 }
 
 /** One shared joint simulation for every side pot, retaining short opponents as card blockers. */
-export function decisionEquity(view: BotView, opts: { iterations: number; seed: number }) {
+export function decisionEquity(view: DecisionView, opts: { iterations: number; seed: number }) {
   const facts = decisionFacts(view);
   const modeled = modelOpponentRanges(view);
   const participantSeats = [view.seatIndex, ...modeled.map(p => p.seatIndex)];

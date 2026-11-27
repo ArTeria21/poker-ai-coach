@@ -1,6 +1,5 @@
 import { evaluateCards, rankCards } from 'phe';
-import type { Card } from './types';
-import { RANK_NAMES, rankIndex, rankNamePlural, suitIndex } from './deck';
+import { RANK_NAMES, rankIndex, rankNamePlural, suitIndex, type Card } from './deck';
 
 /** Category indices match phe's rankCards: 0 = best category, 8 = worst. */
 export const CATEGORY_NAMES = [

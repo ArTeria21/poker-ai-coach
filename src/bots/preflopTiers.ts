@@ -1,5 +1,4 @@
-import type { Card } from '../engine/types';
-import { RANKS, rankIndex, suitIndex } from '../engine/deck';
+import { RANKS, rankIndex, suitIndex, type Card } from '../cards/deck';
 
 /**
  * 169-hand preflop grid bucketed into tiers 1 (premium) .. 8 (junk).

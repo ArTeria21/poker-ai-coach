@@ -1,10 +1,9 @@
-import type { Card, GameState, PlayerAction, PlayerState, TableConfig } from './types';
-import { firstToReceive, totalPot } from './types';
+import { firstToReceive, totalPot, type GameState, type PlayerAction, type PlayerState, type TableConfig } from './types';
 import type { HandEvent } from './events';
-import { shuffledDeck } from './deck';
+import { shuffledDeck, type Card } from '../cards/deck';
 import { legalActions } from './bettingRules';
 import { buildPots } from './potManager';
-import { analyzeHand, evaluate7 } from './handEval';
+import { analyzeHand, evaluate7 } from '../cards/handEval';
 
 export interface EngineResult {
   state: GameState;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Card } from '../engine/types';
+import type { Card } from '../cards/deck';
 import { bluffRevealCheck } from './bluffReveal';
 import { PERSONALITIES } from '../bots/personalities';
 

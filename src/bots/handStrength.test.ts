@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Card } from '../engine/types';
-import { freshDeck } from '../engine/deck';
-import { evaluate7 } from '../engine/handEval';
+import { freshDeck, type Card } from '../cards/deck';
+import { evaluate7 } from '../cards/handEval';
 import { postflopStrength } from './handStrength';
 
 describe('straight draw ace boundaries', () => {

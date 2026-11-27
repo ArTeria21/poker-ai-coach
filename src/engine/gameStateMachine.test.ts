@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Card, GameState, TableConfig } from './types';
-import { totalPot } from './types';
+import { totalPot, type GameState, type TableConfig } from './types';
 import { applyAction, startHand, startHandWithDeck } from './gameStateMachine';
 import { legalActions } from './bettingRules';
 import { replayHand } from './replay';
-import { freshDeck } from './deck';
+import { freshDeck, type Card } from '../cards/deck';
 import type { HandEvent } from './events';
 
 function config(stacks: number[], buttonIndex = 0): TableConfig {

@@ -1,8 +1,7 @@
 import { cardCodes, evaluateCardCodes } from 'phe';
-import type { Card } from '../engine/types';
-import { concreteRange, validateCards, type OpponentRange } from './ranges';
-import { freshDeck } from '../engine/deck';
-import { mulberry32, randInt, randomSeed } from '../engine/rng';
+import { concreteRange, type OpponentRange } from './ranges';
+import { freshDeck, validateCards, type Card } from '../cards/deck';
+import { mulberry32, randInt, randomSeed } from '../random';
 
 /** Precomputed phe codes for all 52 cards. */
 const CODE = new Map<Card, number>(

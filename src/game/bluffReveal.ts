@@ -1,8 +1,8 @@
-import type { Card } from '../engine/types';
-import type { Rng } from '../engine/rng';
+import type { Card } from '../cards/deck';
+import type { Rng } from '../random';
 import type { Personality } from '../bots/personalities';
 import { postflopStrength } from '../bots/handStrength';
-import { analyzeHand } from '../engine/handEval';
+import { analyzeHand } from '../cards/handEval';
 import { handLabel, handTier } from '../bots/preflopTiers';
 
 /**

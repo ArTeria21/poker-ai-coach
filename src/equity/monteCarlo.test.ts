@@ -98,7 +98,7 @@ it('matches exhaustive joint range equity rather than sequentially filtered rang
 });
 
 it('matches exhaustive one-card completions with a fixed opponent', async () => {
-  const { freshDeck } = await import('../engine/deck');
+  const { freshDeck } = await import('../cards/deck');
   const { cardCodes, evaluateCardCodes } = await import('phe');
   const hero: [string, string] = ['Ah', '9h'];
   const villain: [string, string] = ['Kc', 'Kd'];

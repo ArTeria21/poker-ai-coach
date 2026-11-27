@@ -1,11 +1,12 @@
 import { expect, it } from 'vitest';
-import type { Card, GameState, PlayerAction, TableConfig } from '../engine/types';
+import type { GameState, PlayerAction, TableConfig } from '../engine/types';
 import type { ReplayStep } from '../engine/replay';
 import { startHand, startHandWithDeck, applyAction } from '../engine/gameStateMachine';
-import { freshDeck } from '../engine/deck';
-import { buildBotView, decideAction } from '../bots/botDecision';
+import { freshDeck, type Card } from '../cards/deck';
+import { decideAction } from '../bots/botDecision';
+import { buildDecisionView } from '../engine/decisionView';
 import { PERSONALITIES } from '../bots/personalities';
-import { mulberry32 } from '../engine/rng';
+import { mulberry32 } from '../random';
 import { gradeDecision, gradeHand, gradeHandFromSteps } from './gradeHand';
 
 function fixture(holes:[Card,Card][], board:Card[], stacks=holes.map(()=>1000), ante=0) {
@@ -16,14 +17,14 @@ function fixture(holes:[Card,Card][], board:Card[], stacks=holes.map(()=>1000), 
   return startHandWithDeck(config,[...deal,...board,...freshDeck().filter(c=>!used.has(c))],42,'grade-fixture').state;
 }
 const act=(state:GameState,action:PlayerAction)=>applyAction(state,action).state;
-function passTo(state:GameState,street:string) {while(state.phase!==street)state=act(state,{type:buildBotView(state,state.actionOn!).legal.check?'check':'call'});return state;}
-const grade=(state:GameState,action:PlayerAction)=>gradeDecision(buildBotView(state,state.actionOn!),action);
+function passTo(state:GameState,street:string) {while(state.phase!==street)state=act(state,{type:buildDecisionView(state,state.actionOn!).legal.check?'check':'call'});return state;}
+const grade=(state:GameState,action:PlayerAction)=>gradeDecision(buildDecisionView(state,state.actionOn!),action);
 
 it('flags free folds factually, rejects illegal actions and copies canonical snapshots',()=>{
   let state=fixture([['As','Kd'],['5h','5c']],['Qh','7c','2d','3h','9c']);state=act(state,{type:'call'});
   const result=grade(state,{type:'fold'});expect(result).toMatchObject({basis:'facts',category:'FOLD_WHEN_FREE',model:null});
   expect(()=>grade(state,{type:'raise',amount:1})).toThrow('illegal');
-  const view=buildBotView(state,state.actionOn!);const checked=gradeDecision(view,{type:'check',seatIndex:99} as PlayerAction);
+  const view=buildDecisionView(state,state.actionOn!);const checked=gradeDecision(view,{type:'check',seatIndex:99} as PlayerAction);
   view.board.push('XX');expect(checked.board).toEqual([]);expect(checked.action).toEqual({type:'check'});
 });
 it('uses actual preflop prices including a 100BB shove, without a fictitious BB discount',()=>{
@@ -89,7 +90,7 @@ it('grades every pre-action identically in live calls and batch, ignoring future
   let state=fixture([['7h','2c'],['Ah','Kd'],['9s','9c']],['Ks','8d','3c','Jh','4d']);
   const steps:ReplayStep[]=[{state,events:[]}];const live=[];
   while(state.phase!=='complete'){
-    const seatIndex=state.actionOn!;const action:PlayerAction={type:buildBotView(state,seatIndex).legal.check?'check':'call'};
+    const seatIndex=state.actionOn!;const action:PlayerAction={type:buildDecisionView(state,seatIndex).legal.check?'check':'call'};
     if(seatIndex===0)live.push(grade(state,action));
     const result=applyAction(state,action);state=result.state;steps.push({...result,action,seatIndex});
   }
@@ -102,7 +103,7 @@ it('uses the identical seed replay grading path for real seeded hands',()=>{
   let state=startHand({smallBlind:5,bigBlind:10,buttonIndex:0,seats:[0,1].map(i=>({id:`p${i}`,name:`P${i}`,stack:1000,isHero:i===0}))},42,'seeded-grades').state;
   const initial=state;const live=[];
   while(state.phase!=='complete'){
-    const action:PlayerAction={type:buildBotView(state,state.actionOn!).legal.check?'check':'call'};
+    const action:PlayerAction={type:buildDecisionView(state,state.actionOn!).legal.check?'check':'call'};
     if(state.actionOn===0)live.push(grade(state,action));
     state=act(state,action);
   }
@@ -125,7 +126,7 @@ it('caps unmatched nominal raises and does not penalize a required minimum as an
   expect(raised.facts.matchedAdded).toBe(50);expect(raised.category).not.toBe('WILD_RAISE');
   let state=fixture([['As','Ad'],['Kc','Kd'],['Th','9h']],['2c','5d','8s','Jc','Qd']);
   state=act(state,{type:'raise',amount:500});state=act(state,{type:'fold'});
-  const view=buildBotView(state,2);
+  const view=buildDecisionView(state,2);
   expect(gradeDecision(view,{type:'raise',amount:view.legal.raise!.minTo}).category).not.toBe('SIZING');
 });
 it('keeps pure bluffs uncertain without inventing a raise EV or WILD_RAISE error',()=>{
@@ -140,7 +141,7 @@ it('uses the neutral positional prior for the same opening hand UTG versus butto
   // Six handed action starts at seat 3 (UTG); both tested hands are A7s.
   const early=grade(state,{type:'raise',amount:30});
   let late=act(state,{type:'fold'});late=act(late,{type:'fold'});late=act(late,{type:'fold'});
-  expect(buildBotView(late,0).position).toBe('BTN');
+  expect(buildDecisionView(late,0).position).toBe('BTN');
   const button=grade(late,{type:'raise',amount:30});
   expect(early.category).toBe('LOOSE_PREFLOP');expect(button.verdict).toBe('good');
 });
@@ -215,7 +216,7 @@ it('quotes the price against eligible awards, excluding inaccessible side pots a
 it('grades bubble all-in calls on ICM prize EV, not chip EV',()=>{
   const spot=(hero:[Card,Card],payouts?:number[])=>{
     let state=fixture([['2c','3d'],['6c','7d'],hero],[],[50,150,100],10);state=act(state,{type:'fold'});state=act(state,{type:'raise',amount:90});
-    return buildBotView({...state,config:{...state.config,payouts}},2);
+    return buildDecisionView({...state,config:{...state.config,payouts}},2);
   };
   expect(gradeDecision(spot(['Kh','Qd']),{type:'call'}).verdict).toBe('good');
   const call=gradeDecision(spot(['Kh','Qd'],[0.65,0.35]),{type:'call'});
@@ -229,10 +230,10 @@ it('grades bubble all-in calls on ICM prize EV, not chip EV',()=>{
   // Multiway all-in with three players left: no prize model, so no verdict.
   for(const hero of [['Ah','Ad'],['7h','2s']] as [Card,Card][]){
     let state=fixture([['2c','3d'],['6c','7d'],hero],[],[50,150,100],10);state=act(state,{type:'raise',amount:50});state=act(state,{type:'raise',amount:150});
-    const multi=gradeDecision(buildBotView({...state,config:{...state.config,payouts:[0.65,0.35]}},2),{type:'call'});
+    const multi=gradeDecision(buildDecisionView({...state,config:{...state.config,payouts:[0.65,0.35]}},2),{type:'call'});
     expect(multi.model!.prize).toBeNull();expect(multi).toMatchObject({verdict:'uncertain',basis:'chip-ev-model'});
   }
   // Heads-up: chip EV decides, and blunder severity stays in chips.
   let hu=fixture([['As','Kd'],['7h','2s']],[],[1000,300]);hu=act(hu,{type:'raise',amount:300});
-  expect(gradeDecision(buildBotView({...hu,config:{...hu.config,payouts:[0.65,0.35]}},1),{type:'call'})).toMatchObject({verdict:'blunder',basis:'chip-ev-model'});
+  expect(gradeDecision(buildDecisionView({...hu,config:{...hu.config,payouts:[0.65,0.35]}},1),{type:'call'})).toMatchObject({verdict:'blunder',basis:'chip-ev-model'});
 });

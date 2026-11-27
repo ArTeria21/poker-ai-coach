@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { archetypePosterior, modelOpponentRanges } from './opponentRanges';
 import { jitterPersonality } from './lineup';
-import { freshDeck } from '../engine/deck';
-import { evaluate7 } from '../engine/handEval';
-import { buildBotView, decideAction } from './botDecision';
+import { freshDeck, type Card } from '../cards/deck';
+import { evaluate7 } from '../cards/handEval';
+import { decideAction } from './botDecision';
+import { buildDecisionView } from '../engine/decisionView';
 import { PERSONALITIES, type Personality } from './personalities';
-import { mulberry32, type Rng } from '../engine/rng';
+import { mulberry32, type Rng } from '../random';
 import { startHand, startHandWithDeck, applyAction } from '../engine/gameStateMachine';
 import { handTier } from './preflopTiers';
 import type { WeightedCombo } from '../equity/ranges';
-import type { Card, GameState, PlayerAction, PublicAction, TableConfig } from '../engine/types';
+import type { GameState, PlayerAction, PublicAction, TableConfig } from '../engine/types';
 
 const config = { smallBlind:5, bigBlind:10, buttonIndex:0, seats:[0,1,2].map(i => ({id:`p${i}`,name:`P${i}`,stack:1000,isHero:i===0})) };
 const tierShare = (range: WeightedCombo[], tier: number) => range.reduce((n,c) => n+(handTier(c.cards)===tier ? c.weight : 0),0)/range.reduce((n,c)=>n+c.weight,0);
@@ -19,7 +20,7 @@ it('concentrates a three-bet range on premiums (the bots 3-bet only tier 1 for v
   state = applyAction(state,{type:'raise',amount:30}).state;
   state = applyAction(state,{type:'raise',amount:90}).state;
   state = applyAction(state,{type:'fold'}).state;
-  const view = buildBotView(state,0);
+  const view = buildDecisionView(state,0);
   const threeBet = modelOpponentRanges(view)[0];
   const loose = structuredClone(view);
   loose.publicPlayers[1].position = 'BTN';
@@ -35,7 +36,7 @@ it('concentrates a three-bet range on premiums (the bots 3-bet only tier 1 for v
   expect(view).toEqual(before);
 });
 it('uses only the historical street board and separates blockers from action likelihoods', () => {
-  const view = buildBotView(startHand(config,42).state,0);
+  const view = buildDecisionView(startHand(config,42).state,0);
   view.holeCards = ['As','Ad']; view.phase='river'; view.board=['Qh','7h','2c','Kc','3d'];
   view.publicPlayers[2].folded=true;
   view.publicHistory=[{seatIndex:1,street:'flop',type:'raise',amount:60,amountAdded:60,toStreetBet:60,potBefore:100,toCallBefore:0,stackBefore:990} satisfies PublicAction];
@@ -45,14 +46,14 @@ it('uses only the historical street board and separates blockers from action lik
   expect(weight(first,'Ah','Kh')/weight(first,'6c','6d')).toBeCloseTo(weight(second,'Ah','Kh')/weight(second,'6c','6d'),10);
 });
 it('starts unobserved opponents at a uniform card prior and excludes folded seats', () => {
-  const view=buildBotView(startHand(config,42).state,0);
+  const view=buildDecisionView(startHand(config,42).state,0);
   const modeled=modelOpponentRanges(view);
   expect(modeled).toHaveLength(2);
   expect(new Set(modeled[0].range.map(c=>c.weight))).toEqual(new Set([1]));
   expect(modeled[0].range.flatMap(c=>c.cards).some(c=>view.holeCards.includes(c))).toBe(false);
 });
 it('keeps relative evidence on long action lines instead of flooring every cumulative weight equally', () => {
-  const view=buildBotView(startHand(config,42).state,0);
+  const view=buildDecisionView(startHand(config,42).state,0);
   view.holeCards=['2c','3d'];
   view.publicPlayers[2].folded=true;
   view.publicHistory=Array.from({length:200}, () => ({seatIndex:1,street:'preflop' as const,type:'raise' as const,amount:100,amountAdded:50,toStreetBet:100,potBefore:100,toCallBefore:20,stackBefore:1000}));
@@ -73,7 +74,7 @@ it.each<[string, number[], PlayerAction[], number, number]>([
 ])('%s: the short-stack mixture weights each tier by the share of archetypes whose bot jams it', (_name, stacks, before, bot, viewer) => {
   let state = startHand(short(stacks),1).state;
   for (const a of before) state = applyAction(state,a).state;
-  const view = buildBotView(state,bot);
+  const view = buildDecisionView(state,bot);
   const cuts: number[] = []; let jam: PlayerAction | undefined;
   for (const personality of Object.values(PERSONALITIES)) {
     const tiers = new Set<number>();
@@ -89,7 +90,7 @@ it.each<[string, number[], PlayerAction[], number, number]>([
   }
   state = applyAction(state,jam!).state;
   while (state.actionOn !== viewer) state = applyAction(state,{type:'fold'}).state;
-  const range = modelOpponentRanges(buildBotView(state,viewer)).find(p => p.seatIndex === bot)!.range;
+  const range = modelOpponentRanges(buildDecisionView(state,viewer)).find(p => p.seatIndex === bot)!.range;
   const mean = (t:number) => { const c = range.filter(x => handTier(x.cards) === t); return c.reduce((n,x) => n+x.weight,0)/c.length; };
   for (let t = 1; t <= 8; t++) expect(mean(t)).toBeCloseTo(cuts.filter(cut => cut >= t).length / cuts.length, 1);
 });
@@ -109,7 +110,7 @@ describe('archetype mixture matches simulated jittered bots', () => {
     let state = start;
     for (const [seat, action] of line) {
       if (state.actionOn !== seat) throw new Error(`line expects seat ${seat}, ${state.actionOn} is on action`);
-      if (seat === target && decideAction(buildBotView(state,seat), personality, 'medium', rng).action.type !== action.type) return null;
+      if (seat === target && decideAction(buildDecisionView(state,seat), personality, 'medium', rng).action.type !== action.type) return null;
       state = applyAction(state,action).state;
     }
     return state;
@@ -130,7 +131,7 @@ describe('archetype mixture matches simulated jittered bots', () => {
   ])('%s: archetype posterior within 0.05, mean tier within tolerance, tier 1-3 shares within 0.1', (_name, line, target, stack, tierTolerance = 0.25) => {
     const dealt = startHand(table(6,0,stack),3).state;
     const end = play(dealt, line, -1, PERSONALITIES.shark, mulberry32(0))!;
-    const view = buildBotView(end, end.actionOn!);
+    const view = buildDecisionView(end, end.actionOn!);
     const hands = handsWithout([...view.holeCards, ...view.board]), rng = mulberry32(5 + SEED);
     const count: Record<string, number> = Object.fromEntries(ids.map(id => [id,0]));
     let total = 0, tiers = 0;
@@ -180,7 +181,7 @@ describe('archetype mixture matches simulated jittered bots', () => {
       }
     }
     expect(total).toBeGreaterThan(500);
-    const view = buildBotView(last!,1);
+    const view = buildDecisionView(last!,1);
     expect(maxGap(truthOf(count,total), archetypePosterior(view).find(p => p.seatIndex === target)!.posterior)).toBeLessThan(0.05);
     const range = modelOpponentRanges(view).find(p => p.seatIndex === target)!.range;
     const modeled = range.reduce((n,c) => n + c.weight * share(c.cards), 0) / range.reduce((n,c) => n + c.weight, 0);

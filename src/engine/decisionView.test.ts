@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
-import { startHand, applyAction } from '../engine/gameStateMachine';
-import { buildBotView } from './botDecision';
-import { replayHand } from '../engine/replay';
+import { startHand, applyAction } from './gameStateMachine';
+import { buildDecisionView } from './decisionView';
+import { replayHand } from './replay';
 
 const config = { smallBlind: 5, bigBlind: 10, buttonIndex: 0, seats: [0,1,2].map(i => ({ id: `p${i}`, name: `P${i}`, stack: 1000, isHero: i === 0 })) };
 it('records public actions before street transitions and replays them identically', () => {
@@ -20,7 +20,7 @@ it('records public actions before street transitions and replays them identicall
 it('exposes copied public state without seed, deck or opponents holes', () => {
   let state = startHand(config, 42, 'privacy').state;
   state = applyAction(state, { type: 'call' }).state;
-  const view = buildBotView(state, state.actionOn!);
+  const view = buildDecisionView(state, state.actionOn!);
   expect(view.handId).toBe('privacy');
   expect(view.decisionIndex).toBe(1);
   expect(Object.keys(view.publicPlayers![0]).sort()).toEqual(['allIn','hasActed','folded','id','position','seatIndex','stack','streetBet','totalCommitted'].sort());
@@ -35,11 +35,20 @@ it('exposes copied public state without seed, deck or opponents holes', () => {
 it('does not expose seed-derived IDs or change when private opponent/deck data changes', () => {
   const state = startHand(config, 123456).state;
   expect(state.handId).toBe('hand');
-  const view = buildBotView(state, state.actionOn!);
+  const view = buildDecisionView(state, state.actionOn!);
   const changed = structuredClone(state);
   changed.seed = 999;
   changed.deck.reverse(); changed.deckIndex = 42;
   changed.players[1].holeCards = ['XX','YY'];
   changed.players[2].holeCards = ['ZZ','WW'];
-  expect(buildBotView(changed, changed.actionOn!)).toEqual(view);
+  expect(buildDecisionView(changed, changed.actionOn!)).toEqual(view);
+});
+it('rejects a seat that is not on action and a completed hand', () => {
+  let state = startHand(config, 42, 'rejects').state;
+  const waiting = (state.actionOn! + 1) % state.players.length;
+  expect(() => buildDecisionView(state, waiting)).toThrow(`seat ${waiting} is not on action`);
+  state = applyAction(state, { type: 'fold' }).state;
+  state = applyAction(state, { type: 'fold' }).state;
+  expect(state.phase).toBe('complete');
+  expect(() => buildDecisionView(state, 0)).toThrow();
 });

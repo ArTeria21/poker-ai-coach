@@ -1,9 +1,9 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import type { Card } from '../src/engine/types';
+import type { Card } from '../src/cards/deck';
 import { monteCarloEquity } from '../src/equity/monteCarlo';
 import { parseRange } from '../src/equity/ranges';
-import { hashSeed } from '../src/engine/rng';
+import { hashSeed } from '../src/random';
 import { drawCompletionOuts, headsUpRaiseEV, potOdds, terminalCallEV } from '../src/math/pokerMath';
 import { bubbleFactor, icmEquities, icmOutcomeEV } from '../src/math/icm';
 import type { RequestGate } from '../src/agent/training';

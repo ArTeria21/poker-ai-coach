@@ -1,4 +1,4 @@
-import { randInt, shuffleInPlace, type Rng } from '../engine/rng';
+import { randInt, shuffleInPlace, type Rng } from '../random';
 import { PERSONALITIES, type Personality } from './personalities';
 
 export const BOT_COUNT = 5;

@@ -1,8 +1,8 @@
-import type { Card, PlayerAction, Street } from '../engine/types';
-import type { HandRecord, ReplayStep } from '../engine/replay';
-import { replayHand } from '../engine/replay';
-import { hashSeed } from '../engine/rng';
-import { buildBotView, type BotView } from '../bots/botDecision';
+import type { PlayerAction, Street } from '../engine/types';
+import type { Card } from '../cards/deck';
+import { replayHand, type HandRecord, type ReplayStep } from '../engine/replay';
+import { hashSeed } from '../random';
+import { buildDecisionView, type DecisionView } from '../engine/decisionView';
 import { handTier, handLabel } from '../bots/preflopTiers';
 import { PERSONALITIES } from '../bots/personalities';
 import { postflopStrength } from '../bots/handStrength';
@@ -62,7 +62,7 @@ export interface HandGrade {
 const ITERATIONS = 1000;
 
 /** Same public decision identity and sampling budget for live and replay; never uses the deal seed. */
-const decisionSeed = (view: BotView) => hashSeed(`${view.handId}:${view.decisionIndex}:${view.seatIndex}`);
+const decisionSeed = (view: DecisionView) => hashSeed(`${view.handId}:${view.decisionIndex}:${view.seatIndex}`);
 
 export function gradeHand(record: HandRecord, heroSeatIndex: number): HandGrade {
   return gradeHandFromSteps(record.handId, replayHand(record).steps, heroSeatIndex);
@@ -72,7 +72,7 @@ export function gradeHandFromSteps(handId: string, steps: ReplayStep[], heroSeat
   for (let i = 1; i < steps.length; i++) {
     const step = steps[i];
     if (step.seatIndex === heroSeatIndex && step.action) {
-      const before = buildBotView(steps[i - 1].state, heroSeatIndex);
+      const before = buildDecisionView(steps[i - 1].state, heroSeatIndex);
       decisions.push(gradeDecision(before, step.action));
     }
   }
@@ -82,7 +82,7 @@ export function gradeHandFromSteps(handId: string, steps: ReplayStep[], heroSeat
 }
 
 /** Grades the pre-action information set; model-based conclusions are explicitly scoped to chip EV, ICM prize EV or heuristics. */
-export function gradeDecision(view: BotView, input: PlayerAction): DecisionGrade {
+export function gradeDecision(view: DecisionView, input: PlayerAction): DecisionGrade {
   const legal = view.legal;
   let valid = false;
   switch (input.type) {

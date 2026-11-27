@@ -1,59 +1,11 @@
-import type { Card, GameState, LegalActions, PlayerAction, Position, Street, PublicAction } from '../engine/types';
-import { positionOfSeat, totalPot, firstToReceive } from '../engine/types';
-import { legalActions } from '../engine/bettingRules';
-import type { Rng } from '../engine/rng';
+import type { PlayerAction } from '../engine/types';
+import type { DecisionView } from '../engine/decisionView';
+import type { Rng } from '../random';
 import { handTier, handLabel } from './preflopTiers';
 import { postflopStrength } from './handStrength';
 import { decisionFacts, decisionEquity } from '../equity/decisionEquity';
 import { RangeSamplingError } from '../equity/monteCarlo';
 import { DIFFICULTY_NOISE, type Difficulty, type Personality } from './personalities';
-
-/**
- * Everything a bot may legitimately know when deciding. Constructed from the
- * game state by buildBotView — bots never see the GameState itself, so hole
- * card leakage is impossible by construction. Opponents' personalities are
- * likewise absent: they exist only in TableController's private state.
- */
-export interface PublicPlayer {
-  id: string;
-  seatIndex: number;
-  position: Position;
-  stack: number;
-  streetBet: number;
-  totalCommitted: number;
-  folded: boolean;
-  allIn: boolean;
-  hasActed: boolean;
-}
-
-export interface BotView {
-  handId: string;
-  decisionIndex: number;
-  buttonIndex: number | null;
-  firstToReceiveSeat: number;
-  publicPlayers: PublicPlayer[];
-  publicHistory: PublicAction[];
-  seatIndex: number;
-  holeCards: [Card, Card];
-  board: Card[];
-  phase: Street;
-  position: Position;
-  /** Total chips in the pot (all commitments so far). */
-  pot: number;
-  /** Actual ante paid this hand; dead money is not a limper's live bet. */
-  antePot: number;
-  toCall: number;
-  currentBet: number;
-  myStreetBet: number;
-  myStack: number;
-  bigBlind: number;
-  /** Tournament prize shares by place; absent for chip-EV-only hands. */
-  payouts?: number[];
-  legal: LegalActions;
-  numActive: number;
-  /** True when this seat made the final preflop raise (continuation-bet initiative). */
-  iAmLastAggressor?: boolean;
-}
 
 export interface BotDecision {
   action: PlayerAction;
@@ -61,46 +13,8 @@ export interface BotDecision {
   trace: string[];
 }
 
-/** Builds the information set for the seat currently on action. */
-export function buildBotView(state: GameState, seatIndex: number): BotView {
-  const la = legalActions(state);
-  if (!la || la.seatIndex !== seatIndex) {
-    throw new Error(`buildBotView: seat ${seatIndex} is not on action`);
-  }
-  const p = state.players[seatIndex];
-  if (state.phase === 'complete') throw new Error('hand is complete');
-  return {
-    seatIndex,
-    handId: state.handId,
-    decisionIndex: state.actionHistory.length,
-    buttonIndex: state.buttonIndex,
-    firstToReceiveSeat: firstToReceive(state.players.length, state.smallBlindIndex, state.bigBlindIndex),
-    publicPlayers: state.players.map(q => ({
-      id: q.id, seatIndex: q.seatIndex, position: positionOfSeat(state, q.seatIndex),
-      stack: q.stack, streetBet: q.streetBet, totalCommitted: q.totalCommitted,
-      folded: q.folded, allIn: q.allIn, hasActed: q.hasActed,
-    })),
-    publicHistory: state.actionHistory.map(action => ({ ...action })),
-    holeCards: [...p.holeCards],
-    board: [...state.board],
-    phase: state.phase,
-    position: positionOfSeat(state, seatIndex),
-    pot: totalPot(state),
-    antePot: state.antePot,
-    toCall: la.call?.amount ?? 0,
-    currentBet: state.currentBet,
-    myStreetBet: p.streetBet,
-    myStack: p.stack,
-    bigBlind: state.config.bigBlind,
-    payouts: state.config.payouts && [...state.config.payouts],
-    legal: la,
-    numActive: state.players.filter((q) => !q.folded).length,
-    iAmLastAggressor: state.actionHistory.filter(a => a.street === 'preflop' && a.type === 'raise').at(-1)?.seatIndex === seatIndex,
-  };
-}
-
 export function decideAction(
-  view: BotView,
+  view: DecisionView,
   personality: Personality,
   difficulty: Difficulty,
   rng: Rng,
@@ -128,7 +42,7 @@ export function decideAction(
 // ---------------------------------------------------------------------------
 
 function decidePreflop(
-  view: BotView,
+  view: DecisionView,
   p: Personality,
   difficulty: Difficulty,
   rng: Rng,
@@ -199,7 +113,7 @@ function decidePreflop(
 }
 
 function decidePostflop(
-  view: BotView,
+  view: DecisionView,
   p: Personality,
   difficulty: Difficulty,
   rng: Rng,
@@ -272,7 +186,7 @@ function decidePostflop(
 }
 
 /** Conditional checkdown equity needs a realization policy while betting remains; this is not proven action EV. */
-function modeledCallIsPlayable(equity: ReturnType<typeof decisionEquity>, view: BotView, p: Personality, trace: string[]): boolean {
+function modeledCallIsPlayable(equity: ReturnType<typeof decisionEquity>, view: DecisionView, p: Personality, trace: string[]): boolean {
   if (equity.prize) {
     trace.push(`ICM: call vs fold ${(100 * equity.prize.callEV).toFixed(2)}% prize equity.`);
     return equity.prize.callEV >= 0;
@@ -287,7 +201,7 @@ function modeledCallIsPlayable(equity: ReturnType<typeof decisionEquity>, view: 
 const MIN_EQUITY_VS_TIER1 = 0.13; // shortcut: a human may shove only AA (weakest hands ~6.2%, A9o), so 6.2-13% prices can be -EV vs them; and on a bubble ICM can make such cheap calls -$EV too (hard bots use prize EV there); use the range model on all difficulties if that matters
 
 /** Positional <=10BB push/fold heuristic, not a solved equilibrium or ICM strategy. */
-function decideShortStack(view: BotView, p: Personality, facts: ReturnType<typeof decisionFacts>, equity: ReturnType<typeof decisionEquity> | undefined, trace: string[]): PlayerAction {
+function decideShortStack(view: DecisionView, p: Personality, facts: ReturnType<typeof decisionFacts>, equity: ReturnType<typeof decisionEquity> | undefined, trace: string[]): PlayerAction {
   const depth = facts.effectiveDepthBB;
   const tier = handTier(view.holeCards);
   const facingRaise = view.currentBet > view.bigBlind;
@@ -325,7 +239,7 @@ function raiseTo(target: number): PlayerAction {
  * Guarantees the decision is legal: clamps raises into bounds and degrades
  * gracefully (raise → call → check → fold). Bots must never crash the engine.
  */
-function ensureLegal(action: PlayerAction, view: BotView, trace: string[]): PlayerAction {
+function ensureLegal(action: PlayerAction, view: DecisionView, trace: string[]): PlayerAction {
   const legal = view.legal;
   switch (action.type) {
     case 'raise': {

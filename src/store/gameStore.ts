@@ -1,6 +1,7 @@
 import type { DecisionGrade } from '../analysis/gradeHand';
 import { create } from 'zustand';
-import type { ActionType, Card, GamePhase, LegalActions, Position, PublicAction } from '../engine/types';
+import type { ActionType, GamePhase, LegalActions, Position, PublicAction } from '../engine/types';
+import type { Card } from '../cards/deck';
 import type { TournamentState } from '../game/tournament';
 import type { Avatar } from '../bots/lineup';
 

@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TableController } from './tableController';
 import { useGameStore } from '../store/gameStore';
 import { useSettingsStore } from '../store/settingsStore';
-import * as botModule from '../bots/botDecision';
+import * as decisionViewModule from '../engine/decisionView';
 import { gradeHandFromSteps } from '../analysis/gradeHand';
 import { applyAction } from '../engine/gameStateMachine';
-import { buildBotView, decideAction } from '../bots/botDecision';
+import { decideAction } from '../bots/botDecision';
+import { buildDecisionView } from '../engine/decisionView';
 import { modelOpponentRanges } from '../bots/opponentRanges';
 import { decisionEquity } from '../equity/decisionEquity';
 import { PERSONALITIES, type Personality } from '../bots/personalities';
@@ -13,7 +14,9 @@ import type { GameState } from '../engine/types';
 import { coachSnapshot } from '../agent/snapshot';
 
 vi.mock('./sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
-vi.mock('../engine/rng', async (original) => ({ ...await original<typeof import('../engine/rng')>(), randomSeed: () => 42 }));
+vi.mock('../random', async (original) => ({ ...await original<typeof import('../random')>(), randomSeed: () => 42 }));
+// Pass-through mock so the projection can be spied on.
+vi.mock('../engine/decisionView', async (original) => ({ ...await original<typeof import('../engine/decisionView')>() }));
 vi.mock('../bots/botDecision', async (original) => ({
   ...await original<typeof import('../bots/botDecision')>(),
   decideAction: vi.fn((view) => ({ action: { type: view.legal.check ? 'check' : 'call' }, trace: [] })),
@@ -55,7 +58,7 @@ afterEach(() => {
 
 describe('SNG table controller', () => {
   it('publishes the same pre-action grade as batch, preserves it through bot responses, and clears on a new hand', async () => {
-    const spy=vi.spyOn(botModule,'buildBotView');
+    const spy=vi.spyOn(decisionViewModule,'buildDecisionView');
     controller.startSession();
     await advanceUntil(()=>store().heroLegal!==null);
     expect(store().latestDecisionGrade).toBeNull();
@@ -231,7 +234,7 @@ describe('SNG table controller', () => {
         const legal = store().heroLegal;
         if (legal) {
           const state = (controller as unknown as { state: GameState }).state;
-          const view = buildBotView(state, legal.seatIndex);
+          const view = buildDecisionView(state, legal.seatIndex);
           const action = { type: legal.check ? 'check' as const : 'call' as const };
           controller.humanAct(action);
           const grade = (controller as unknown as { latestDecisionGrade: unknown }).latestDecisionGrade;

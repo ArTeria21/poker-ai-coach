@@ -5,8 +5,7 @@
  * Chips are always integers. A hand is fully determined by {config, seed, actions[]}.
  */
 
-/** Card as a 2-char string: rank in '23456789TJQKA' + suit in 'cdhs', e.g. 'As', 'Td'. */
-export type Card = string;
+import type { Card } from '../cards/deck';
 
 export type Street = 'preflop' | 'flop' | 'turn' | 'river';
 export type GamePhase = Street | 'complete';

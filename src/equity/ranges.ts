@@ -1,10 +1,4 @@
-import { RANKS, SUITS } from '../engine/deck';
-import type { Card } from '../engine/types';
-
-export function validateCards(cards: Card[]): void {
-  if (cards.some(c => !/^[2-9TJQKA][cdhs]$/.test(c))) throw new Error('Invalid card');
-  if (new Set(cards).size !== cards.length) throw new Error('Duplicate card');
-}
+import { RANKS, SUITS, validateCards, type Card } from '../cards/deck';
 
 /** Uniform concrete combos; overlapping notation never increases a combo's weight. */
 export function parseRange(range: string, blockers: Card[] = []): [Card, Card][] {

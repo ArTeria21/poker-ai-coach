@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import type { GameState, PlayerAction, TableConfig } from './types';
-import { totalPot } from './types';
+import { totalPot, type GameState, type PlayerAction, type TableConfig } from './types';
 import { applyAction, startHand } from './gameStateMachine';
 import { legalActions } from './bettingRules';
-import { mulberry32, randInt, type Rng } from './rng';
+import { mulberry32, randInt, type Rng } from '../random';
 import { replayHand } from './replay';
 
 function makeConfig(stacks: number[], buttonIndex: number, bigBlindAnte: number): TableConfig {

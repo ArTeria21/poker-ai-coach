@@ -5,15 +5,15 @@ import { TableController } from '../game/tableController';
 import { beginTournamentHand, createTournament } from '../game/tournament';
 import { applyAction, startHand } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
-import { mulberry32 } from '../engine/rng';
+import { mulberry32 } from '../random';
 import type { GameState } from '../engine/types';
 import { useGameStore, type GameViewState } from '../store/gameStore';
 import { useSettingsStore } from '../store/settingsStore';
 
 vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
-vi.mock('../engine/rng', async (original) => {
+vi.mock('../random', async (original) => {
   let n = 0;
-  return { ...await original<typeof import('../engine/rng')>(), randomSeed: () => (++n * 2654435761) >>> 0 };
+  return { ...await original<typeof import('../random')>(), randomSeed: () => (++n * 2654435761) >>> 0 };
 });
 
 const store = () => useGameStore.getState();

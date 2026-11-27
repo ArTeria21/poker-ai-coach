@@ -1,4 +1,4 @@
-import type { Card } from '../../engine/types';
+import type { Card } from '../../cards/deck';
 import { isRedSuit, rankLabel, suitSymbol } from '../../game/format';
 import { useSettingsStore } from '../../store/settingsStore';
 

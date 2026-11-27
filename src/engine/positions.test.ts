@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { GameState, TableConfig } from './types';
-import { positionOfSeat } from './types';
+import { positionOfSeat, type GameState, type TableConfig } from './types';
 import { applyAction, startHand, startHandWithDeck } from './gameStateMachine';
 import { legalActions } from './bettingRules';
 import { replayHand } from './replay';
-import { freshDeck } from './deck';
+import { freshDeck } from '../cards/deck';
 
 function config(n: number, buttonIndex: number | null, smallBlindIndex: number | null, bigBlindIndex: number): TableConfig {
   return {

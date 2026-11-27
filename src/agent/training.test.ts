@@ -5,7 +5,7 @@ import { TableController } from '../game/tableController';
 import { beginTournamentHand, createTournament } from '../game/tournament';
 import { applyAction, startHandWithDeck } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
-import { freshDeck } from '../engine/deck';
+import { freshDeck } from '../cards/deck';
 import type { PlayerAction } from '../engine/types';
 import { useGameStore, type GameViewState } from '../store/gameStore';
 import {

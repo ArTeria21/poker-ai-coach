@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { GameState, TableConfig } from '../engine/types';
 import { applyAction, startHand, startHandWithDeck } from '../engine/gameStateMachine';
-import { freshDeck } from '../engine/deck';
-import { mulberry32 } from '../engine/rng';
-import { buildBotView, decideAction } from './botDecision';
+import { freshDeck, type Card } from '../cards/deck';
+import { mulberry32 } from '../random';
+import { decideAction } from './botDecision';
+import { buildDecisionView } from '../engine/decisionView';
 import { PERSONALITIES, type Difficulty } from './personalities';
 import { handTier } from './preflopTiers';
-import type { Card } from '../engine/types';
 
 const personalityIds = Object.keys(PERSONALITIES);
 
@@ -54,7 +54,7 @@ describe('bot sanity', () => {
     const decisions = [0, 10].map((bigBlindAnte) => {
       let { state } = startHandWithDeck({ ...config([1000, 1000, 1000, 1000]), bigBlindAnte }, deck);
       if (limped) state = applyAction(state, { type: 'call' }).state;
-      return decideAction(buildBotView(state, state.actionOn!), PERSONALITIES.rock, 'hard', () => 0.1);
+      return decideAction(buildDecisionView(state, state.actionOn!), PERSONALITIES.rock, 'hard', () => 0.1);
     });
     expect(decisions[0].action).toEqual({ type: 'raise', amount: limped ? 40 : 30 });
     expect(decisions[1]).toEqual(decisions[0]);
@@ -63,7 +63,7 @@ describe('bot sanity', () => {
   it('shows the real remaining call against an all-in short big blind', () => {
     let { state } = startHand(config([1000, 1000, 7]), 42);
     state = applyAction(state, { type: 'fold' }).state;
-    const view = buildBotView(state, 1);
+    const view = buildDecisionView(state, 1);
     expect(view.legal.call).toEqual({ amount: 2, allIn: false });
     expect(view.toCall).toBe(2);
   });
@@ -83,7 +83,7 @@ describe('bot sanity', () => {
     for (let i = 0; i < 100; i++) {
       const { state } = startHandWithDeck(config([1000, 1000, 1000, 1000]), deck);
       expect(state.actionOn).toBe(3); // UTG first to act
-      const view = buildBotView(state, 3);
+      const view = buildDecisionView(state, 3);
       const { action } = decideAction(view, PERSONALITIES.rock, 'hard', mulberry32(i));
       expect(action.type).toBe('fold');
     }
@@ -103,7 +103,7 @@ describe('bot sanity', () => {
     for (const pid of personalityIds) {
       for (let i = 0; i < 200; i++) {
         const { state } = startHandWithDeck(config([1000, 1000, 1000, 1000]), deck);
-        const view = buildBotView(state, 3);
+        const view = buildDecisionView(state, 3);
         const { action } = decideAction(view, PERSONALITIES[pid], 'medium', mulberry32(i * 7 + 1));
         expect(action.type, `${pid} folded aces (rng ${i})`).not.toBe('fold');
       }
@@ -119,7 +119,7 @@ describe('bot sanity', () => {
       while (state.actionOn !== seat) state = applyAction(state, { type: 'fold' }).state;
       let folds = 0;
       for (const pid of ['rock', 'nit']) for (let i = 0; i < 100; i++) {
-        if (decideAction(buildBotView(state, seat), PERSONALITIES[pid], 'medium', mulberry32(i + 1)).action.type === 'fold') folds++;
+        if (decideAction(buildDecisionView(state, seat), PERSONALITIES[pid], 'medium', mulberry32(i + 1)).action.type === 'fold') folds++;
       }
       expect(folds > 0, `${hand.join('')} seat ${seat}`).toBe(hand[0] === 'Js');
     }
@@ -132,20 +132,20 @@ describe('bot sanity', () => {
       return applyAction(state, { type: 'raise', amount: 6000 }).state;
     };
     for (const difficulty of ['easy', 'medium', 'hard'] as Difficulty[]) {
-      expect(decideAction(buildBotView(spot(11), 1), PERSONALITIES.nit, difficulty, mulberry32(1)).action.type).toBe('call'); // 1 chip into 22: 4.5%
+      expect(decideAction(buildDecisionView(spot(11), 1), PERSONALITIES.nit, difficulty, mulberry32(1)).action.type).toBe('call'); // 1 chip into 22: 4.5%
     }
-    for (const difficulty of ['easy', 'medium'] as Difficulty[]) expect(decideAction(buildBotView(spot(14), 1), PERSONALITIES.nit, difficulty, mulberry32(1)).action.type).toBe('fold'); // 4 into 28: 14.29%, just above the 14.19% bound
-    expect(decideAction(buildBotView(spot(20, ['Kc', 'Td']), 1), PERSONALITIES.nit, 'hard', mulberry32(1)).action.type).toBe('call'); // modeled +EV, tier table says fold
-    expect(decideAction(buildBotView(spot(100), 1), PERSONALITIES.nit, 'hard', mulberry32(1)).action.type).toBe('fold');
+    for (const difficulty of ['easy', 'medium'] as Difficulty[]) expect(decideAction(buildDecisionView(spot(14), 1), PERSONALITIES.nit, difficulty, mulberry32(1)).action.type).toBe('fold'); // 4 into 28: 14.29%, just above the 14.19% bound
+    expect(decideAction(buildDecisionView(spot(20, ['Kc', 'Td']), 1), PERSONALITIES.nit, 'hard', mulberry32(1)).action.type).toBe('call'); // modeled +EV, tier table says fold
+    expect(decideAction(buildDecisionView(spot(100), 1), PERSONALITIES.nit, 'hard', mulberry32(1)).action.type).toBe('fold');
     // 8BB, UTG min-raises: calling is not terminal, so the modeled call does not replace the AA shove.
     let open = startHandWithDeck(config([80, 80, 80, 80]), riggedDeck(0, [['2c', '7d'], ['3c', '8d'], ['As', 'Ah'], ['5h', '6h']], [])).state;
     for (const action of [{ type: 'raise', amount: 20 }, { type: 'fold' }, { type: 'fold' }] as const) open = applyAction(open, action).state;
-    expect(decideAction(buildBotView(open, 2), PERSONALITIES.nit, 'hard', mulberry32(1)).action.type).toBe('raise');
+    expect(decideAction(buildDecisionView(open, 2), PERSONALITIES.nit, 'hard', mulberry32(1)).action.type).toBe('raise');
     // Three-way the single-range equity bound does not hold, so the price rule stays off.
     let { state } = startHandWithDeck(config([6000, 6000, 11]), riggedDeck(0, [['As', 'Ah'], ['Ks', 'Kh'], ['7c', '2d']], []));
     state = applyAction(state, { type: 'raise', amount: 6000 }).state;
     state = applyAction(state, { type: 'call' }).state;
-    expect(decideAction(buildBotView(state, 2), PERSONALITIES.nit, 'medium', mulberry32(1)).trace.join()).toContain('positional push/fold heuristic');
+    expect(decideAction(buildDecisionView(state, 2), PERSONALITIES.nit, 'medium', mulberry32(1)).trace.join()).toContain('positional push/fold heuristic');
   });
 
   it('value-bets top pair heads-up but not four-way', () => {
@@ -155,7 +155,7 @@ describe('bot sanity', () => {
       while (state.phase === 'preflop') state = applyAction(state, { type: state.currentBet > state.players[state.actionOn!].streetBet ? 'call' : 'check' }).state;
       while (state.actionOn !== 0) state = applyAction(state, { type: 'check' }).state;
       let bets = 0;
-      for (let i = 0; i < 100; i++) bets += decideAction(buildBotView(state, 0), PERSONALITIES.shark, 'medium', mulberry32(i + 1)).trace.includes('value betting ~60% pot') ? 1 : 0;
+      for (let i = 0; i < 100; i++) bets += decideAction(buildDecisionView(state, 0), PERSONALITIES.shark, 'medium', mulberry32(i + 1)).trace.includes('value betting ~60% pot') ? 1 : 0;
       return bets;
     };
     expect(betRate(2)).toBeGreaterThan(0);
@@ -172,12 +172,12 @@ describe('bot sanity', () => {
     expect(state.phase).toBe('river');
     state = applyAction(state, { type: 'check' }).state;
     state = applyAction(state, { type: 'raise', amount: 200 }).state;
-    expect(buildBotView(state, 1).legal.raise).toBeDefined();
+    expect(buildDecisionView(state, 1).legal.raise).toBeDefined();
     let heuristicRaises = 0;
     for (let i = 0; i < 30; i++) {
-      const { trace } = decideAction(buildBotView(state, 1), PERSONALITIES.maniac, 'hard', mulberry32(i + 1));
+      const { trace } = decideAction(buildDecisionView(state, 1), PERSONALITIES.maniac, 'hard', mulberry32(i + 1));
       expect(trace).not.toContain('raising for value');
-      if (decideAction(buildBotView(state, 1), PERSONALITIES.maniac, 'medium', mulberry32(i + 1)).trace.includes('raising for value')) heuristicRaises++;
+      if (decideAction(buildDecisionView(state, 1), PERSONALITIES.maniac, 'medium', mulberry32(i + 1)).trace.includes('raising for value')) heuristicRaises++;
     }
     expect(heuristicRaises).toBeGreaterThan(10); // without the range model the same read does raise
   });
@@ -203,7 +203,7 @@ describe('bot integration (property-based)', () => {
             if (++steps > 400) throw new Error('bot hand did not terminate');
             const seat = state.actionOn!;
             const personality = PERSONALITIES[personalityIds[seat % personalityIds.length]];
-            const view = buildBotView(state, seat);
+            const view = buildDecisionView(state, seat);
             const { action } = decideAction(view, personality, difficulty, rng);
             state = applyAction(state, action).state; // throws if illegal
           }

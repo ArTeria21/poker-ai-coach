@@ -1,4 +1,4 @@
-import type { Card } from '../engine/types';
+import type { Card } from '../cards/deck';
 
 const SUIT_SYMBOL: Record<string, string> = { c: '♣', d: '♦', h: '♥', s: '♠' };
 

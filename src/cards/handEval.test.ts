@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import pokersolver from 'pokersolver';
 import { analyzeHand, evaluate7, handCategory } from './handEval';
 import { freshDeck } from './deck';
-import { mulberry32, shuffleInPlace } from './rng';
+import { mulberry32, shuffleInPlace } from '../random';
 
 const { Hand } = pokersolver;
 

@@ -1,13 +1,13 @@
 import { gradeDecision, type DecisionGrade } from '../analysis/gradeHand';
-import type { GameState, PlayerAction } from '../engine/types';
-import { positionOfSeat, totalPot } from '../engine/types';
+import { positionOfSeat, totalPot, type GameState, type PlayerAction } from '../engine/types';
 import type { HandEvent } from '../engine/events';
 import { applyAction, startHand } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
-import { mulberry32, randomSeed, type Rng } from '../engine/rng';
+import { mulberry32, randomSeed, type Rng } from '../random';
 import type { Personality } from '../bots/personalities';
 import { generateLineup, type Avatar } from '../bots/lineup';
-import { buildBotView, decideAction } from '../bots/botDecision';
+import { decideAction } from '../bots/botDecision';
+import { buildDecisionView } from '../engine/decisionView';
 import { bluffRevealCheck } from './bluffReveal';
 import { beginTournamentHand, createTournament, settleTournamentHand, type TournamentState } from './tournament';
 import { sounds } from './sounds';
@@ -82,7 +82,7 @@ export class TableController {
       if (!la.raise || action.amount == null || !Number.isFinite(action.amount)) return;
       action = { type: 'raise', amount: Math.max(la.raise.minTo, Math.min(la.raise.maxTo, Math.round(action.amount))) };
     }
-    this.latestDecisionGrade = gradeDecision(buildBotView(this.state, la.seatIndex), action);
+    this.latestDecisionGrade = gradeDecision(buildDecisionView(this.state, la.seatIndex), action);
     this.pendingHuman = null;
     resolve(action);
   }
@@ -132,7 +132,7 @@ export class TableController {
       } else {
         await this.delay(450 + this.botRng() * 950);
         if (token !== this.sessionToken) return;
-        action = decideAction(buildBotView(this.state, seat), this.personalities.get(player.id)!, useSettingsStore.getState().difficulty, this.botRng).action;
+        action = decideAction(buildDecisionView(this.state, seat), this.personalities.get(player.id)!, useSettingsStore.getState().difficulty, this.botRng).action;
       }
       const result = applyAction(this.state, action);
       this.state = result.state;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameState } from '../engine/types';
 import { applyAction, startHand, startHandWithDeck } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
-import { freshDeck } from '../engine/deck';
+import { freshDeck } from '../cards/deck';
 import { beginTournamentHand, createTournament, settleTournamentHand, type TournamentState } from './tournament';
 
 const lineup = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isHero: i === 0 }));

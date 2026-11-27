@@ -1,6 +1,5 @@
-import type { Card } from '../engine/types';
-import { freshDeck, rankIndex, suitIndex } from '../engine/deck';
-import { analyzeHand, bestStraightHigh, evaluate7 } from '../engine/handEval';
+import { freshDeck, rankIndex, suitIndex, type Card } from '../cards/deck';
+import { analyzeHand, bestStraightHigh, evaluate7 } from '../cards/handEval';
 
 export interface StrengthInfo {
   /** 0..1 heuristic — made hand plus draw potential. */

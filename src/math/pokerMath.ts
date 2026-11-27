@@ -1,7 +1,5 @@
-import type { Card } from '../engine/types';
-import { freshDeck, rankIndex, suitIndex } from '../engine/deck';
-import { bestStraightHigh, handCategory, evaluate7 } from '../engine/handEval';
-import { validateCards } from '../equity/ranges';
+import { freshDeck, rankIndex, suitIndex, validateCards, type Card } from '../cards/deck';
+import { bestStraightHigh, handCategory, evaluate7 } from '../cards/handEval';
 
 export function nonnegative(value: number, name: string): void {
   if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be finite and nonnegative`);

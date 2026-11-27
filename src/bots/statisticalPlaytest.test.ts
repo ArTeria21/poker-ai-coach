@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState, TableConfig } from '../engine/types';
 import { applyAction, startHand } from '../engine/gameStateMachine';
-import { mulberry32, type Rng } from '../engine/rng';
-import { buildBotView, decideAction } from './botDecision';
+import { mulberry32, type Rng } from '../random';
+import { decideAction } from './botDecision';
+import { buildDecisionView } from '../engine/decisionView';
 import { PERSONALITIES, type Personality } from './personalities';
 import { jitterPersonality } from './lineup';
 
@@ -46,7 +47,7 @@ function runPlaytest(seats: Personality[] = LINEUP.map((id) => PERSONALITIES[id]
     while (state.phase !== 'complete') {
       if (++steps > 400) throw new Error('playtest hand did not terminate');
       const seat = state.actionOn!;
-      const view = buildBotView(state, seat);
+      const view = buildDecisionView(state, seat);
       const { action } = decideAction(view, seats[seat], 'medium', rng);
       if (state.phase === 'preflop') {
         if (action.type === 'call' || action.type === 'raise') voluntary.add(seat);

@@ -1,4 +1,5 @@
-import type { ActionType, Card } from './types';
+import type { ActionType } from './types';
+import type { Card } from '../cards/deck';
 
 /**
  * Typed event log emitted by the engine. One source of truth, three consumers:

@@ -1,6 +1,6 @@
 import type { CoachSnapshot } from './contract';
 import type { ActionType } from '../engine/types';
-import { rankIndex, suitIndex } from '../engine/deck';
+import { rankIndex, suitIndex } from '../cards/deck';
 import { handTier } from '../bots/preflopTiers';
 import { potOdds } from '../math/pokerMath';
 

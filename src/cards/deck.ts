@@ -1,5 +1,7 @@
-import type { Card } from './types';
-import { mulberry32, shuffleInPlace } from './rng';
+/** Card as a 2-char string: rank in '23456789TJQKA' + suit in 'cdhs', e.g. 'As', 'Td'. */
+export type Card = string;
+
+import { mulberry32, shuffleInPlace } from '../random';
 
 export const RANKS = '23456789TJQKA';
 export const SUITS = 'cdhs';
@@ -30,6 +32,12 @@ export function suitIndex(card: Card): number {
   const i = SUITS.indexOf(card[1]);
   if (i === -1) throw new Error(`Invalid card suit: ${card}`);
   return i;
+}
+
+/** Throws on a malformed card or a card repeated within the list. */
+export function validateCards(cards: Card[]): void {
+  if (cards.some(c => !/^[2-9TJQKA][cdhs]$/.test(c))) throw new Error('Invalid card');
+  if (new Set(cards).size !== cards.length) throw new Error('Duplicate card');
 }
 
 /** All 52 cards in canonical order. */

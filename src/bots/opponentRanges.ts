@@ -1,8 +1,7 @@
-import type { BotView } from './botDecision';
+import type { DecisionView } from '../engine/decisionView';
 import type { Position, PublicAction } from '../engine/types';
 import type { WeightedCombo } from '../equity/ranges';
-import { validateCards } from '../equity/ranges';
-import { freshDeck } from '../engine/deck';
+import { freshDeck, validateCards } from '../cards/deck';
 import { handTier } from './preflopTiers';
 import { postflopStrength } from './handStrength';
 import { DIFFICULTY_NOISE, PERSONALITIES, type Personality } from './personalities';
@@ -64,7 +63,7 @@ function deepPreflop(p: Personality, o: Observation, position: Position, thresho
 }
 
 /** P(observed preflop action | tier, archetype) for a medium bot. */
-function preflopProbability(p: Personality, o: Observation, position: Position, tier: number, view: BotView): number {
+function preflopProbability(p: Personality, o: Observation, position: Position, tier: number, view: DecisionView): number {
   const { action, depthBB } = o;
   const bigBlind = view.bigBlind;
   if (depthBB <= 10) {
@@ -119,7 +118,7 @@ function postflopProbability(p: Personality, o: Observation, strength: number, s
 }
 
 /** Per opponent and archetype, log P(public actions | hand, archetype) for every unblocked hand. */
-function archetypeLogLikelihoods(view: BotView) {
+function archetypeLogLikelihoods(view: DecisionView) {
   if (view.publicPlayers.length < 2 || view.publicPlayers.length > 6 || !view.publicPlayers.some(p => p.seatIndex === view.seatIndex)) throw new Error('Public player context required');
   if (view.board.length !== BOARD_LENGTH[view.phase]) throw new Error('Board does not match current street');
   validateCards([...view.holeCards, ...view.board]);
@@ -189,7 +188,7 @@ function archetypeLogLikelihoods(view: BotView) {
  * fixed for the hand. Each likelihood is the medium bot's own action probability; bet sizes only narrow preflop raises far above
  * the bots' formula sizes. Heuristic reads, not solver ranges.
  */
-export function modelOpponentRanges(view: BotView) {
+export function modelOpponentRanges(view: DecisionView) {
   const { hands, players } = archetypeLogLikelihoods(view);
   return players.map(({ seatIndex, byType }) => {
     // The archetype is fixed for the whole hand: sum_t P(t) * prod_actions L(a | hand, t), via log-sum-exp.
@@ -210,7 +209,7 @@ export function modelOpponentRanges(view: BotView) {
 
 /** Public archetype posterior P(archetype | actions) per live opponent: the mixture weights modelOpponentRanges marginalizes over. */
 // Test-only calibration probe: a ready-made archetype read — must never be exposed to Dan or the UI.
-export function archetypePosterior(view: BotView): { seatIndex: number; posterior: Record<string, number> }[] {
+export function archetypePosterior(view: DecisionView): { seatIndex: number; posterior: Record<string, number> }[] {
   return archetypeLogLikelihoods(view).players.map(({ seatIndex, byType }) => {
     const evidence = byType.map(out => { let top = -Infinity; for (const w of out) top = Math.max(top, w); let sum = 0; for (const w of out) sum += Math.exp(w - top); return top + Math.log(sum); });
     const top = Math.max(...evidence);

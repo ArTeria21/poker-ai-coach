@@ -20,7 +20,7 @@ const fake = vi.hoisted(() => ({ model: null as unknown, seed: 0 }));
 vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: () => () => fake.model }));
 vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 // Deterministic deals and bot noise: counter seeds instead of crypto ones, and a fixed button.
-vi.mock('../engine/rng', async (original) => ({ ...await original<typeof import('../engine/rng')>(), randomSeed: () => Math.imul(++fake.seed, 2654435761) >>> 0 }));
+vi.mock('../random', async (original) => ({ ...await original<typeof import('../random')>(), randomSeed: () => Math.imul(++fake.seed, 2654435761) >>> 0 }));
 vi.mock('../game/tournament', async (original) => {
   const real = await original<typeof import('../game/tournament')>();
   return { ...real, createTournament: (lineup: Parameters<typeof real.createTournament>[0], _button: number, id: string) => real.createTournament(lineup, 0, id) };

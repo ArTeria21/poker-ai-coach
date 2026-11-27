@@ -1,5 +1,4 @@
-import { useGameStore } from '../../store/gameStore';
-import type { SeatView } from '../../store/gameStore';
+import { useGameStore, type SeatView } from '../../store/gameStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { formatChips } from '../../game/format';
 import { FeltOverlaySvg, SeatAvatarIcon } from '../Icons';

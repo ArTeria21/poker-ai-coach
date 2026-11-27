@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState, TableConfig } from '../engine/types';
 import { applyAction, startHand } from '../engine/gameStateMachine';
-import { mulberry32 } from '../engine/rng';
-import { buildBotView, decideAction } from './botDecision';
+import { mulberry32 } from '../random';
+import { decideAction } from './botDecision';
+import { buildDecisionView } from '../engine/decisionView';
 import { postflopStrength } from './handStrength';
 import { PERSONALITIES } from './personalities';
 
@@ -44,7 +45,7 @@ function runBluffTest(): Map<string, Aggro> {
       if (++steps > 400) throw new Error('bluff playtest hand did not terminate');
       const seat = state.actionOn!;
       const pid = LINEUP[seat];
-      const view = buildBotView(state, seat);
+      const view = buildDecisionView(state, seat);
       const { action } = decideAction(view, PERSONALITIES[pid], 'medium', rng);
       if (state.phase !== 'preflop') {
         const t = tallies.get(pid)!;
