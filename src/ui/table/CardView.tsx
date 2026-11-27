@@ -1,5 +1,5 @@
 import type { Card } from '../../cards/deck';
-import { isRedSuit, rankLabel, suitSymbol } from '../../game/format';
+import { rankLabel, suitSymbol } from '../../cards/format';
 import { useSettingsStore } from '../../app/settingsStore';
 
 interface CardViewProps {
@@ -12,7 +12,7 @@ interface CardViewProps {
 }
 
 function suitColorClass(card: Card, fourColorDeck: boolean): string {
-  if (!fourColorDeck) return isRedSuit(card) ? 'card--red' : 'card--black';
+  if (!fourColorDeck) return card[1] === 'h' || card[1] === 'd' ? 'card--red' : 'card--black';
   switch (card[1]) {
     case 'h':
       return 'card--red';

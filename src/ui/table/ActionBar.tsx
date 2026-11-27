@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useGameView } from '../../app/gameStore';
 import { tableController } from '../../app/tableController';
-import { formatChips } from '../../game/format';
+import { formatChips } from './formatChips';
 import type { PlayerAction } from '../../engine/types';
 import { dispatch, useTableLock } from '../../app/coachSession';
 import { useSettingsStore } from '../../app/settingsStore';

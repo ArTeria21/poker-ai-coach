@@ -8,13 +8,13 @@ import type { Personality } from '../decision/personalities';
 import { generateLineup, type Avatar } from '../bots/lineup';
 import { decideAction } from '../bots/botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { bluffRevealCheck } from '../game/bluffReveal';
+import { bluffRevealCheck } from '../bots/bluffReveal';
 import { beginTournamentHand, createTournament, settleTournamentHand, type TournamentState } from '../game/tournament';
 import { sounds } from './sounds';
 import { gameStore } from './gameStore';
 import type { GameViewState, SeatView } from './tableView';
 import { SPEED_FACTOR, useSettingsStore } from './settingsStore';
-import { formatCards } from '../game/format';
+import { formatCards } from '../cards/format';
 
 /** Runs the pure hand/tournament engines and publishes public table snapshots. */
 export class TableController {

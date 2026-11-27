@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { BLIND_LEVELS, HANDS_PER_LEVEL, PAYOUT_SHARES, type TournamentState } from '../../game/tournament';
-import { formatChips } from '../../game/format';
+import { formatChips } from './formatChips';
 import type { SeatView } from '../../app/tableView';
 import { ChevronDownIcon } from '../shared/Icons';
 

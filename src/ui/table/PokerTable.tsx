@@ -1,7 +1,7 @@
 import { useGameView } from '../../app/gameStore';
 import type { SeatView } from '../../app/tableView';
 import { useSettingsStore } from '../../app/settingsStore';
-import { formatChips } from '../../game/format';
+import { formatChips } from './formatChips';
 import { FeltOverlaySvg, SeatAvatarIcon } from '../shared/Icons';
 import { CardView } from './CardView';
 import './PokerTable.css';
