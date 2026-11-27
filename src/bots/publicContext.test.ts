@@ -3,7 +3,7 @@ import { startHand, applyAction } from '../engine/gameStateMachine';
 import { buildBotView } from './botDecision';
 import { replayHand } from '../engine/replay';
 
-const config = { smallBlind: 5, bigBlind: 10, buttonIndex: 0, seats: [0,1,2].map(i => ({ id: `p${i}`, name: `P${i}`, stack: 1000, isHero: i === 0, personalityId: i === 1 ? 'nit' : 'maniac' })) };
+const config = { smallBlind: 5, bigBlind: 10, buttonIndex: 0, seats: [0,1,2].map(i => ({ id: `p${i}`, name: `P${i}`, stack: 1000, isHero: i === 0 })) };
 it('records public actions before street transitions and replays them identically', () => {
   let state = startHand(config, 42, 'public-test').state;
   state = applyAction(state, { type: 'raise', amount: 30 }).state;
@@ -23,7 +23,7 @@ it('exposes copied public state without seed, deck or opponents holes', () => {
   const view = buildBotView(state, state.actionOn!);
   expect(view.handId).toBe('privacy');
   expect(view.decisionIndex).toBe(1);
-  expect(Object.keys(view.publicPlayers![0]).sort()).toEqual(['allIn','hasActed','folded','id','personalityId','position','seatIndex','stack','streetBet','totalCommitted'].sort());
+  expect(Object.keys(view.publicPlayers![0]).sort()).toEqual(['allIn','hasActed','folded','id','position','seatIndex','stack','streetBet','totalCommitted'].sort());
   expect(JSON.stringify(view)).not.toMatch(/"(seed|deck|deckIndex|startingStack)"/);
   const before = structuredClone(state);
   view.holeCards[0] = 'XX'; view.board.push('XX');

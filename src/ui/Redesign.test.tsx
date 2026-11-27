@@ -9,6 +9,7 @@ vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), chec
 import { createTournament } from '../game/tournament';
 import { tableController } from '../game/tableController';
 import { useGameStore, type SeatView } from '../store/gameStore';
+import type { Avatar } from '../bots/lineup';
 import { useSettingsStore } from '../store/settingsStore';
 import { App } from './App';
 import { AnsweredQuestion } from './DiagnosisCards';
@@ -23,20 +24,20 @@ function makeFixture() {
   const tournament = createTournament(
     [
       { id: 'hero', name: 'You', isHero: true },
-      { id: 'shark', name: 'Selena "The Shark"', isHero: false, personalityId: 'shark' },
-      { id: 'rock', name: 'Rocky Reyes', isHero: false, personalityId: 'rock' },
-      { id: 'maniac', name: '"Mad" Marta', isHero: false, personalityId: 'maniac' },
-      { id: 'fish', name: 'Finn the Fish', isHero: false, personalityId: 'fish' },
-      { id: 'nit', name: 'Norm the Nit', isHero: false, personalityId: 'nit' },
+      { id: 'bot-1', name: 'Ivan', isHero: false },
+      { id: 'bot-2', name: 'Lena', isHero: false },
+      { id: 'bot-3', name: 'Mateo', isHero: false },
+      { id: 'bot-4', name: 'Priya', isHero: false },
+      { id: 'bot-5', name: 'Hugo', isHero: false },
     ],
     0,
     'ui-test',
   );
   const positions = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO'] as const;
+  const avatars: Avatar[] = ['shark', 'owl', 'key', 'cactus', 'rocket'];
   const seats: SeatView[] = tournament.players.map((p, i) => ({
     ...p,
-    avatar: '',
-    personalityTagline: p.isHero ? null : `Tagline ${p.id}`,
+    avatar: p.isHero ? null : avatars[i - 1],
     position: positions[i],
     streetBet: 0,
     committed: 0,
@@ -100,14 +101,11 @@ describe('Botanical Casino Glasshouse UI & fixes', () => {
     expect(container.querySelector('.bet-spot--pos3 .dealer-button')?.textContent).toBe('D');
     expect(container.querySelector('.seat--pos0 .seat-won')?.textContent).toBe('+2,450');
     expect(container.querySelector('.seat--pos0 .seat-pos')?.textContent).toBe('BTN');
-    // Hidden bot archetypes: never leak personalityTagline or render quips
+    // Hidden bot archetypes: no tooltip; each bot shows its drawn decorative figurine, the hero the hero emblem.
     expect(container.querySelector('.seat--pos1 .seat-pod')?.getAttribute('title')).toBeNull();
-    expect(container.querySelector('.seat-tagline')).toBeNull();
-    expect(container.querySelector('.seat-quip')).toBeNull();
-    const botSvg = container.querySelector('.seat--pos1 .seat-avatar svg');
-    expect(botSvg).not.toBeNull();
-    expect(botSvg?.getAttribute('data-avatar-shape')).not.toBeNull();
-    expect(botSvg?.className).not.toMatch(/shark|rock|maniac|fish|nit/);
+    expect(container.querySelector('.seat--pos1 .seat-avatar svg')?.getAttribute('data-avatar')).toBe('shark');
+    expect([...container.querySelectorAll('.seat-avatar svg[data-avatar]')].map((svg) => svg.getAttribute('data-avatar')).sort()).toEqual(['cactus', 'key', 'owl', 'rocket', 'shark']);
+    expect(container.querySelector('.seat--pos0 .seat-avatar svg')?.getAttribute('class')).toContain('seat-avatar-svg--hero');
   });
 
   it('toggles Chips vs BB display across pot, stacks, bets, and payouts', () => {

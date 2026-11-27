@@ -1,22 +1,30 @@
 import { expect, it } from 'vitest';
-import { startHand, applyAction } from '../engine/gameStateMachine';
+import { startHand, startHandWithDeck, applyAction } from '../engine/gameStateMachine';
+import { freshDeck } from '../engine/deck';
+import type { PlayerAction } from '../engine/types';
 import { buildBotView, decideAction } from './botDecision';
 import { PERSONALITIES } from './personalities';
 import { mulberry32 } from '../engine/rng';
 import { modelOpponentRanges } from './opponentRanges';
 import { handTier } from './preflopTiers';
 
-const config={smallBlind:5,bigBlind:10,buttonIndex:0,seats:[0,1,2].map(i=>({id:`p${i}`,name:`P${i}`,stack:1000,isHero:i===0,personalityId:'shark'}))};
+const config={smallBlind:5,bigBlind:10,buttonIndex:0,seats:[0,1,2].map(i=>({id:`p${i}`,name:`P${i}`,stack:1000,isHero:i===0}))};
 it('hard faced-price decisions actually depend on modeled public ranges',()=>{
-  let state=startHand(config,42).state;
-  state=applyAction(state,{type:'call'}).state;
-  state=applyAction(state,{type:'raise',amount:1000}).state;
-  state=applyAction(state,{type:'fold'}).state;
-  const view=buildBotView(state,0); view.holeCards=['Qs','Qd'];
-  const tight=structuredClone(view);tight.publicPlayers[1].personalityId='nit';
-  const loose=structuredClone(view);loose.publicPlayers[1].personalityId='maniac';
-  const a=decideAction(tight,PERSONALITIES.shark,'hard',mulberry32(12));
-  const b=decideAction(loose,PERSONALITIES.shark,'hard',mulberry32(12));
+  // Heads-up, hero BB with ace-high on Ks 8d 4c 2h 7s facing a river bet at the same pot odds (25.8%) after two public lines.
+  const hu={smallBlind:10,bigBlind:20,buttonIndex:0,seats:[0,1].map(i=>({id:`p${i}`,name:`P${i}`,stack:2000,isHero:i===1}))};
+  const hero=['Ah','4d'], board=['Ks','8d','4c','2h','7s'];
+  const rest=freshDeck().filter(c=>![...hero,...board].includes(c));
+  const X:PlayerAction={type:'check'},C:PlayerAction={type:'call'},bet=(amount:number):PlayerAction=>({type:'raise',amount});
+  const facing=(line:PlayerAction[])=>{
+    let state=startHandWithDeck(hu,[hero[0],rest[0],hero[1],rest[1],...board,...rest.slice(2)],1,'ranges').state;
+    for(const a of line) state=applyAction(state,a).state;
+    return buildBotView(state,1);
+  };
+  const barrels=facing([bet(60),C,X,bet(70),C,X,bet(150),C,X,bet(300)]);
+  const checkedDown=facing([bet(60),C,X,X,X,X,X,bet(64)]);
+  expect(barrels.toCall/(barrels.pot+barrels.toCall)).toBeCloseTo(checkedDown.toCall/(checkedDown.pot+checkedDown.toCall),2);
+  const a=decideAction(barrels,PERSONALITIES.shark,'hard',mulberry32(12));
+  const b=decideAction(checkedDown,PERSONALITIES.shark,'hard',mulberry32(12));
   expect(a.action.type).toBe('fold');
   expect(b.action.type).toBe('call');
   expect(a.trace.join(' ')).toContain('range MC');

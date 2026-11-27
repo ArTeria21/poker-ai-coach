@@ -11,7 +11,8 @@ import { DIFFICULTY_NOISE, type Difficulty, type Personality } from './personali
 /**
  * Everything a bot may legitimately know when deciding. Constructed from the
  * game state by buildBotView — bots never see the GameState itself, so hole
- * card leakage is impossible by construction.
+ * card leakage is impossible by construction. Opponents' personalities are
+ * likewise absent: they exist only in TableController's private state.
  */
 export interface PublicPlayer {
   id: string;
@@ -23,7 +24,6 @@ export interface PublicPlayer {
   folded: boolean;
   allIn: boolean;
   hasActed: boolean;
-  personalityId?: string;
 }
 
 export interface BotView {
@@ -79,7 +79,6 @@ export function buildBotView(state: GameState, seatIndex: number): BotView {
       id: q.id, seatIndex: q.seatIndex, position: positionOfSeat(state, q.seatIndex),
       stack: q.stack, streetBet: q.streetBet, totalCommitted: q.totalCommitted,
       folded: q.folded, allIn: q.allIn, hasActed: q.hasActed,
-      personalityId: state.config.seats[q.seatIndex].personalityId,
     })),
     publicHistory: state.actionHistory.map(action => ({ ...action })),
     holeCards: [...p.holeCards],

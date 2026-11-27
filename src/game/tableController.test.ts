@@ -5,7 +5,12 @@ import { useSettingsStore } from '../store/settingsStore';
 import * as botModule from '../bots/botDecision';
 import { gradeHandFromSteps } from '../analysis/gradeHand';
 import { applyAction } from '../engine/gameStateMachine';
-import { decideAction } from '../bots/botDecision';
+import { buildBotView, decideAction } from '../bots/botDecision';
+import { modelOpponentRanges } from '../bots/opponentRanges';
+import { decisionEquity } from '../equity/decisionEquity';
+import { PERSONALITIES, type Personality } from '../bots/personalities';
+import type { GameState } from '../engine/types';
+import { coachSnapshot } from '../agent/snapshot';
 
 vi.mock('./sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 vi.mock('../engine/rng', async (original) => ({ ...await original<typeof import('../engine/rng')>(), randomSeed: () => 42 }));
@@ -122,9 +127,9 @@ describe('SNG table controller', () => {
   });
 
   it('lets an eliminated hero spectate, preserves bot identities after compaction, and finishes without a rebuy', async () => {
-    const identities: [string, string | undefined][] = [];
+    const identities: [Personality, string | undefined][] = [];
     vi.mocked(decideAction).mockImplementation((view, personality) => {
-      identities.push([personality.id, store().seats.find((p) => p.isActing)?.id]);
+      identities.push([personality, store().seats.find((p) => p.isActing)?.id]);
       return { action: { type: view.legal.check ? 'check' : 'call' }, trace: [] };
     });
     controller.startSession();
@@ -139,7 +144,7 @@ describe('SNG table controller', () => {
     expect(store().tournament!.players.filter((p) => p.stack > 0).length).toBeGreaterThan(1);
     expect(store().heroLegal).toBeNull();
     vi.mocked(decideAction).mockImplementation((view, personality) => {
-      identities.push([personality.id, store().seats.find((p) => p.isActing)?.id]);
+      identities.push([personality, store().seats.find((p) => p.isActing)?.id]);
       return { action: view.legal.raise ? { type: 'raise', amount: view.legal.raise.maxTo } : { type: view.legal.check ? 'check' : 'call' }, trace: [] };
     });
     for (let hand = 0; hand < 20 && store().status !== 'tournamentComplete'; hand++) {
@@ -152,13 +157,96 @@ describe('SNG table controller', () => {
     expect(store().tournament!.players.filter((p) => p.stack > 0)).toHaveLength(1);
     expect(store().tournament!.players.every((p) => p.place !== null)).toBe(true);
     expect(store().tournament!.players.reduce((sum, p) => sum + p.payoutShare, 0)).toBeCloseTo(1);
-    expect(identities.every(([expected, actual]) => expected === actual)).toBe(true);
-    expect(store().seats.map((p) => p.id)).toEqual(['hero', 'shark', 'rock', 'maniac', 'fish', 'nit']);
+    // Each bot keeps one hidden personality object for the whole tournament, through seat compaction.
+    const byId = new Map<string | undefined, Set<Personality>>();
+    for (const [personality, id] of identities) byId.set(id, (byId.get(id) ?? new Set()).add(personality));
+    expect([...byId.keys()].sort()).toEqual(['bot-1', 'bot-2', 'bot-3', 'bot-4', 'bot-5']);
+    expect([...byId.values()].every((set) => set.size === 1)).toBe(true);
+    expect(new Set([...byId.values()].flatMap((set) => [...set])).size).toBe(5);
+    expect(store().seats.map((p) => p.id)).toEqual(['hero', 'bot-1', 'bot-2', 'bot-3', 'bot-4', 'bot-5']);
     expect(store().log.some((line) => /buy.*in/i.test(line))).toBe(false);
     const handNumber = store().handNumber;
     controller.continueNextHand();
     await vi.runAllTimersAsync();
     expect(store().handNumber).toBe(handNumber);
+  });
+
+  it('seats five neutral, uniquely named bots and publishes no hidden personality', async () => {
+    // Allow-lists: a new public field, even a neutral-named number, must be added here consciously.
+    const allowed = {
+      store: ['appendLog', 'awaitingNext', 'banner', 'bigBlind', 'board', 'currentBet', 'forcedBets', 'handActions', 'handId', 'handNumber', 'heroLegal', 'latestDecisionGrade', 'log', 'phase', 'pot', 'publish', 'reset', 'seats', 'status', 'tournament'],
+      seat: ['allIn', 'avatar', 'committed', 'eliminated', 'folded', 'hasCards', 'holeCards', 'id', 'isActing', 'isButton', 'isHero', 'lastAction', 'name', 'position', 'seatIndex', 'showdownDescription', 'stack', 'streetBet', 'wonAmount'],
+      lastAction: ['amount', 'type'],
+      tournament: ['bigBlindSeat', 'buttonSeat', 'completedHands', 'id', 'levelIndex', 'pendingHandId', 'players', 'smallBlindSeat'],
+      tournamentPlayer: ['id', 'isHero', 'name', 'payoutShare', 'place', 'seatIndex', 'stack'],
+      snapshotPlayer: ['allIn', 'committedThisHand', 'eliminated', 'finishPlace', 'folded', 'isActing', 'isHero', 'name', 'position', 'seat', 'shownCards', 'showdownDescription', 'stack', 'stackBB', 'streetBet', 'wonThisHand'],
+    };
+    const published: Record<keyof typeof allowed, Set<string>> = { store: new Set(), seat: new Set(), lastAction: new Set(), tournament: new Set(), tournamentPlayer: new Set(), snapshotPlayer: new Set() };
+    const collect = (kind: keyof typeof allowed, objects: (object | null | undefined)[]) => {
+      for (const o of objects) if (o) published[kind].add(Object.keys(o).sort().join());
+    };
+    const unsubscribe = useGameStore.subscribe((view) => {
+      collect('store', [view]);
+      collect('seat', view.seats);
+      collect('lastAction', view.seats.map((seat) => seat.lastAction));
+      collect('tournament', [view.tournament]);
+      collect('tournamentPlayer', view.tournament?.players ?? []);
+      collect('snapshotPlayer', coachSnapshot(view)?.players ?? []);
+    });
+    controller.startSession('Priya'); // seed 42 would otherwise seat a bot named Priya
+    await advanceUntil(() => store().heroLegal !== null);
+    const bots = store().seats.filter((p) => !p.isHero);
+    expect(bots.map((p) => p.id)).toEqual(['bot-1', 'bot-2', 'bot-3', 'bot-4', 'bot-5']);
+    expect(new Set(bots.map((p) => p.name)).size).toBe(5);
+    expect(bots.map((p) => p.name)).not.toContain('Priya');
+    controller.humanAct({ type: store().heroLegal!.check ? 'check' : 'call' });
+    await advanceUntil(() => store().latestDecisionGrade !== null);
+    const hidden = /\b(shark|rock|maniac|fish|nit)\b|personality|pfrRatio|vpipTier|aggressionFactor|bluffFrequency|callStation|foldToAggression/i;
+    const { seats, tournament, handActions, forcedBets, latestDecisionGrade, log } = store();
+    // Avatar values are decorative ("shark" is a figurine); the allow-list pins the key and the Avatar type the values.
+    const publicJson = JSON.stringify({ seats, snapshot: coachSnapshot(store()), tournament, handActions, forcedBets, latestDecisionGrade, log }, (key, value: unknown) => (key === 'avatar' ? undefined : value));
+    expect(publicJson).not.toMatch(hidden);
+    const state = (controller as unknown as { state: GameState }).state;
+    expect(JSON.stringify(state)).not.toMatch(hidden);
+    await finishHand();
+    unsubscribe();
+    for (const kind of Object.keys(allowed) as (keyof typeof allowed)[]) expect([...published[kind]], kind).toEqual([allowed[kind].sort().join()]);
+  });
+
+  it('grades and models opponents identically whatever hidden personalities the bots have', async () => {
+    const run = async (archetype: string) => {
+      vi.setSystemTime(new Date('2026-11-26T12:00:00Z'));
+      useGameStore.getState().reset();
+      const used = new Set<string>();
+      vi.mocked(decideAction).mockImplementation((view, personality) => {
+        used.add(personality.id);
+        return { action: { type: view.legal.check ? 'check' : 'call' }, trace: [] };
+      });
+      controller = new TableController();
+      controller.startSession();
+      const hidden = (controller as unknown as { personalities: Map<string, Personality> }).personalities;
+      for (const id of hidden.keys()) hidden.set(id, PERSONALITIES[archetype]);
+      const observed: unknown[] = [];
+      for (let i = 0; i < 500 && !store().awaitingNext; i++) {
+        const legal = store().heroLegal;
+        if (legal) {
+          const state = (controller as unknown as { state: GameState }).state;
+          const view = buildBotView(state, legal.seatIndex);
+          const action = { type: legal.check ? 'check' as const : 'call' as const };
+          controller.humanAct(action);
+          const grade = (controller as unknown as { latestDecisionGrade: unknown }).latestDecisionGrade;
+          expect(grade).not.toBeNull();
+          observed.push({ grade, ranges: modelOpponentRanges(view), equity: decisionEquity(view, { iterations: 300, seed: 1 }) });
+        }
+        await vi.advanceTimersByTimeAsync(500);
+      }
+      controller.stop();
+      expect(used).toEqual(new Set([archetype]));
+      return observed;
+    };
+    const tight = await run('nit');
+    expect(tight.length).toBeGreaterThan(1);
+    expect(await run('maniac')).toEqual(tight);
   });
 
   it.each(['bot delay', 'human wait', 'street delay', 'showdown delay', 'between-hands delay', 'next wait'])('cancels an old session during %s', async (boundary) => {

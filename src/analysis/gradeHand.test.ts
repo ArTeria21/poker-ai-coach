@@ -9,7 +9,7 @@ import { mulberry32 } from '../engine/rng';
 import { gradeDecision, gradeHand, gradeHandFromSteps } from './gradeHand';
 
 function fixture(holes:[Card,Card][], board:Card[], stacks=holes.map(()=>1000), ante=0) {
-  const config:TableConfig={smallBlind:5,bigBlind:10,bigBlindAnte:ante,buttonIndex:0,seats:stacks.map((stack,i)=>({id:`p${i}`,name:`P${i}`,stack,isHero:i===0,personalityId:'nit'}))};
+  const config:TableConfig={smallBlind:5,bigBlind:10,bigBlindAnte:ante,buttonIndex:0,seats:stacks.map((stack,i)=>({id:`p${i}`,name:`P${i}`,stack,isHero:i===0}))};
   const deal:Card[]=[];for(let r=0;r<2;r++) for(let i=1;i<=holes.length;i++)deal.push(holes[i%holes.length][r]);
   const used=new Set([...deal,...board]);
   if(used.size!==deal.length+board.length)throw new Error('Duplicate rigged cards');
@@ -108,15 +108,15 @@ it('uses the identical seed replay grading path for real seeded hands',()=>{
   }
   expect(gradeHand({handId:initial.handId,config:initial.config,seed:initial.seed,actions:state.actionHistory},0).decisions).toEqual(live);
 });
-it('grades a nit three-bet and three barrels against the public range rather than ATC',()=>{
+it('grades a three-bet and three barrels into an overbet against the public range rather than ATC',()=>{
   let state=fixture([['Ad','2c'],['Ts','9h']],['As','Kh','Qd','Jc','3s'],[2000,2000]);
   for(const action of [
     {type:'raise',amount:20},{type:'raise',amount:60},{type:'call'},
-    {type:'raise',amount:100},{type:'call'},{type:'raise',amount:220},{type:'call'},{type:'raise',amount:400},
+    {type:'raise',amount:100},{type:'call'},{type:'raise',amount:220},{type:'call'},{type:'raise',amount:1200},
   ] as PlayerAction[])state=act(state,action);
   const folded=grade(state,{type:'fold'}),called=grade(state,{type:'call'});
   expect(folded).toMatchObject({verdict:'good',basis:'chip-ev-model'});
-  expect(called.category).toBe('CALL_WITHOUT_ODDS');expect(called.model!.showdownEquity).toBeLessThan(.1);
+  expect(called.category).toBe('CALL_WITHOUT_ODDS');expect(called.model!.showdownEquity).toBeLessThan(.3); // top pair, weak kicker: 71% vs any two cards
   expect(folded.note).toContain('prize EV');
 });
 it('caps unmatched nominal raises and does not penalize a required minimum as an oversized alternative',()=>{
@@ -178,9 +178,10 @@ it.each<[[Card,Card],Card[]]>([
   expect(grade(state,{type:'raise',amount:20}).category).toBeUndefined(); // tiny size: no "missed value" SIZING
 });
 it('does not call a heuristic value raise good when the modeled equity says it is behind',()=>{
-  let state=fixture([['6s','Jc'],['Kd','Kh']],['Qs','As','Tc','Ts','7s']);
-  for(const action of [{type:'raise',amount:30},{type:'raise',amount:90},{type:'call'}] as PlayerAction[])state=act(state,action);
-  state=passTo(state,'river');state=act(state,{type:'raise',amount:150});
+  // A 3-high flush (heuristically strong) vs a 3-bet, flop check-raise and two barrels: the modeled range holds the bigger flushes and boats.
+  let state=fixture([['2s','3c'],['Kd','Kh']],['Qs','As','Tc','Ts','7s']);
+  for(const action of [{type:'raise',amount:30},{type:'raise',amount:90},{type:'call'},{type:'check'},{type:'raise',amount:70},{type:'raise',amount:200},{type:'call'},{type:'raise',amount:150},{type:'call'},{type:'raise',amount:150}] as PlayerAction[])state=act(state,action);
+  expect(state.phase).toBe('river');
   const result=grade(state,{type:'raise',amount:450});
   expect(result.model!.showdownEquity).toBeLessThan(0.5);expect(result.verdict).toBe('uncertain');
 });
@@ -216,15 +217,15 @@ it('grades bubble all-in calls on ICM prize EV, not chip EV',()=>{
     let state=fixture([['2c','3d'],['6c','7d'],hero],[],[50,150,100],10);state=act(state,{type:'fold'});state=act(state,{type:'raise',amount:90});
     return buildBotView({...state,config:{...state.config,payouts}},2);
   };
-  expect(gradeDecision(spot(['As','Ks']),{type:'call'}).verdict).toBe('good');
-  const call=gradeDecision(spot(['As','Ks'],[0.65,0.35]),{type:'call'});
+  expect(gradeDecision(spot(['Kh','Qd']),{type:'call'}).verdict).toBe('good');
+  const call=gradeDecision(spot(['Kh','Qd'],[0.65,0.35]),{type:'call'});
   expect(call).toMatchObject({verdict:'mistake',basis:'prize-ev-model',category:'CALL_WITHOUT_ODDS'});
   expect(call.model!.prize!.samplingBand.high).toBeLessThan(0);
-  expect(gradeDecision(spot(['As','Ks'],[0.65,0.35]),{type:'fold'})).toMatchObject({verdict:'good',basis:'prize-ev-model'});
+  expect(gradeDecision(spot(['Kh','Qd'],[0.65,0.35]),{type:'fold'})).toMatchObject({verdict:'good',basis:'prize-ev-model'});
   expect(gradeDecision(spot(['Ah','Ad'],[0.65,0.35]),{type:'call'})).toMatchObject({verdict:'good',basis:'prize-ev-model'});
   expect(gradeDecision(spot(['7h','2s'],[0.65,0.35]),{type:'call'}).verdict).toBe('blunder');
   const bot=(hero:[Card,Card],payouts?:number[])=>decideAction(spot(hero,payouts),PERSONALITIES.shark,'hard',mulberry32(1)).action.type;
-  expect([bot(['As','Ks'],[0.65,0.35]),bot(['As','Ks']),bot(['Ah','Ad'],[0.65,0.35])]).toEqual(['fold','call','call']);
+  expect([bot(['Kh','Qd'],[0.65,0.35]),bot(['Kh','Qd']),bot(['Ah','Ad'],[0.65,0.35])]).toEqual(['fold','call','call']);
   // Multiway all-in with three players left: no prize model, so no verdict.
   for(const hero of [['Ah','Ad'],['7h','2s']] as [Card,Card][]){
     let state=fixture([['2c','3d'],['6c','7d'],hero],[],[50,150,100],10);state=act(state,{type:'raise',amount:50});state=act(state,{type:'raise',amount:150});

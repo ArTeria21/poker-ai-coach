@@ -31,12 +31,11 @@ function runBluffTest(): Map<string, Aggro> {
       smallBlind: 5,
       bigBlind: 10,
       buttonIndex: h % LINEUP.length,
-      seats: LINEUP.map((pid, i) => ({
+      seats: LINEUP.map((_, i) => ({
         id: `p${i}`,
         name: `P${i}`,
         stack: 1000,
         isHero: false,
-        personalityId: pid,
       })),
     };
     let state: GameState = startHand(config, h * 104729 + 7).state;

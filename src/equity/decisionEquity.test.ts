@@ -6,7 +6,7 @@ import { startHand, applyAction } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
 import type { BotView } from '../bots/botDecision';
 
-const config={smallBlind:5,bigBlind:10,buttonIndex:0,seats:[0,1,2].map(i=>({id:`p${i}`,name:`P${i}`,stack:1000,isHero:i===0,personalityId:'shark'}))};
+const config={smallBlind:5,bigBlind:10,buttonIndex:0,seats:[0,1,2].map(i=>({id:`p${i}`,name:`P${i}`,stack:1000,isHero:i===0}))};
 function projection(commitments:number[], stacks:number[]):BotView {
   const view=buildBotView(startHand(config,42).state,0);
   view.antePot=30; view.phase='river'; view.board=['2c','5d','8h','Js','9c']; view.holeCards=['Kh','Kd'];

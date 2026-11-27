@@ -363,7 +363,7 @@ it('A. Training to the hero\'s bust, then spectating to the end', async () => {
 });
 
 it('B. Training through heads-up to the end, then a clean new SNG', async () => {
-  await mount('training', 15000);
+  await mount('training', 15016);
   await play();
   expect(hero().place).toBe(1);
   // Heads-up the filter skips only a free check with offsuit tier-8 junk deeper than 15 BB; postflop always locks.

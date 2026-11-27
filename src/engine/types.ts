@@ -18,8 +18,6 @@ export interface SeatConfig {
   name: string;
   stack: number;
   isHero: boolean;
-  /** Bot personality id; undefined for the human player. */
-  personalityId?: string;
 }
 
 export interface TableConfig {

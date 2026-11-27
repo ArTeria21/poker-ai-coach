@@ -62,7 +62,6 @@ export const coachSnapshotSchema = z.object({
     seat: z.number().int().min(0).max(5),
     name,
     isHero: z.boolean(),
-    botProfile: z.string().max(200).nullable(),
     position: position.nullable(),
     stack: chips,
     stackBB: bigBlinds,

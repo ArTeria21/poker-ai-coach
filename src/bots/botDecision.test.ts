@@ -21,7 +21,6 @@ function config(stacks: number[], buttonIndex = 0): TableConfig {
       name: `P${i}`,
       stack,
       isHero: false,
-      personalityId: personalityIds[i % personalityIds.length],
     })),
   };
 }
@@ -165,17 +164,22 @@ describe('bot sanity', () => {
   });
 
   it('a hard bot never raises "for value" when the range model says it is behind', () => {
-    // Small flush on a four-spade board vs a river overbet in a 3-bet pot: heuristic 0.80, modeled ~15%.
+    // Small flush on a four-spade board vs a flop raise, turn raise and river bet: heuristic 0.80, modeled ~29%.
     const deck = riggedDeck(0, [['Kd', 'Kh'], ['6s', 'Jc']], ['Qs', 'As', 'Tc', 'Ts', '7s']);
     let state = startHandWithDeck(config([1000, 1000]), deck).state;
-    for (const action of [{ type: 'raise', amount: 30 }, { type: 'raise', amount: 90 }, { type: 'call' }] as const) state = applyAction(state, action).state;
-    while (state.phase !== 'river') state = applyAction(state, { type: 'check' }).state;
+    for (const action of [{ type: 'raise', amount: 30 }, { type: 'call' }] as const) state = applyAction(state, action).state;
+    for (const [bet, raise] of [[20, 60], [40, 120]]) for (const action of [{ type: 'raise', amount: bet }, { type: 'raise', amount: raise }, { type: 'call' }] as const) state = applyAction(state, action).state;
+    expect(state.phase).toBe('river');
     state = applyAction(state, { type: 'check' }).state;
-    state = applyAction(state, { type: 'raise', amount: 900 }).state;
+    state = applyAction(state, { type: 'raise', amount: 200 }).state;
+    expect(buildBotView(state, 1).legal.raise).toBeDefined();
+    let heuristicRaises = 0;
     for (let i = 0; i < 30; i++) {
       const { trace } = decideAction(buildBotView(state, 1), PERSONALITIES.maniac, 'hard', mulberry32(i + 1));
       expect(trace).not.toContain('raising for value');
+      if (decideAction(buildBotView(state, 1), PERSONALITIES.maniac, 'medium', mulberry32(i + 1)).trace.includes('raising for value')) heuristicRaises++;
     }
+    expect(heuristicRaises).toBeGreaterThan(10); // without the range model the same read does raise
   });
 });
 
@@ -198,7 +202,7 @@ describe('bot integration (property-based)', () => {
           while (state.phase !== 'complete') {
             if (++steps > 400) throw new Error('bot hand did not terminate');
             const seat = state.actionOn!;
-            const personality = PERSONALITIES[cfg.seats[seat].personalityId!];
+            const personality = PERSONALITIES[personalityIds[seat % personalityIds.length]];
             const view = buildBotView(state, seat);
             const { action } = decideAction(view, personality, difficulty, rng);
             state = applyAction(state, action).state; // throws if illegal

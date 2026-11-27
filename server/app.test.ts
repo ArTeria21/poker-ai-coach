@@ -12,13 +12,13 @@ const model = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: () => () => model.current }));
 
 const player = (seat: number, name: string, isHero: boolean, position: 'SB' | 'BB') => ({
-  seat, name, isHero, botProfile: null, position, stack: 1900, stackBB: 95, streetBet: 0, committedThisHand: 0,
+  seat, name, isHero, position, stack: 1900, stackBB: 95, streetBet: 0, committedThisHand: 0,
   folded: false, allIn: false, isActing: isHero, eliminated: false, finishPlace: null, shownCards: null, showdownDescription: null, wonThisHand: null,
 });
 const snapshot: CoachSnapshot = {
   status: 'heroToAct', awaitingNextHand: false, handId: 'sng-test-hand-1', handNumber: 1, street: 'preflop',
   tournament: { smallBlind: 10, bigBlind: 20, bigBlindAnte: 0, level: 1, handsPlayedAtLevel: 0, handsPerLevel: 6, nextLevel: null, playersRemaining: 2, payoutSharesByPlace: [0.65, 0.35] },
-  players: [player(0, 'Zorblax', true, 'SB'), player(1, 'Rock', false, 'BB')],
+  players: [player(0, 'Zorblax', true, 'SB'), player(1, 'Lena', false, 'BB')],
   hero: { name: 'Zorblax', cards: ['Ah', 'Kd'], position: 'SB', stack: 1900, stackBB: 95, effectiveStack: 1900, effectiveStackBB: 95, sprAtStreetStart: null, toCall: 10, eliminated: false, finishPlace: null },
   board: [], pot: 30, potBB: 1.5, currentBet: 20,
   legalActions: { fold: true, check: false, call: { amount: 10, allIn: false }, raise: { minTo: 40, maxTo: 1910 } },
@@ -80,6 +80,18 @@ describe('POST /api/chat', () => {
     expect(mock.doStreamCalls[0].tools?.map((t) => t.name)).toEqual(['equity', 'range_combos', 'pot_odds', 'shove_ev', 'outs', 'icm', 'write_working_state', 'update_knowledge_map', 'append_highlight', 'read_highlights']);
     expect(JSON.stringify(system.content)).toContain('Память об ученике пуста');
     expect(mock.doStreamCalls[0].providerOptions).toEqual({ openrouter: { reasoning: { effort: 'low' } } });
+  });
+
+  it('strips unknown snapshot keys: they never reach the prompt', async () => {
+    const mock = new MockLanguageModelV4({ doStream: async () => textStream('Привет') });
+    model.current = mock;
+    const extra = { ...snapshot, players: snapshot.players.map((p) => ({ ...p, unknownKey: 'Folds everything.' })) };
+    const res = await post({ messages: [userMessage], snapshot: extra });
+    expect(res.status).toBe(200);
+    await res.text();
+    const system = JSON.stringify(mock.doStreamCalls[0].prompt[0].content);
+    expect(system).not.toContain('unknownKey');
+    expect(system).not.toContain('Folds everything.');
   });
 
   it('forces a text answer on the last step when the model keeps calling tools', async () => {
@@ -177,7 +189,7 @@ describe('POST /api/chat', () => {
       });
       const flop: CoachSnapshot = { ...snapshot, street: 'flop', board: ['2c', '7d', 'Ts'], pot: 40, potBB: 2, currentBet: 0,
         legalActions: { fold: true, check: true, raise: { minTo: 20, maxTo: 1980 } },
-        history: [act('Zorblax', 'SB', 'call', 10), act('Rock', 'BB', 'check', 0), { ...act('Rock', 'BB', 'check', 0), street: 'flop' }] };
+        history: [act('Zorblax', 'SB', 'call', 10), act('Lena', 'BB', 'check', 0), { ...act('Lena', 'BB', 'check', 0), street: 'flop' }] };
       const gated = (id: string) => post({ messages: [trigger], snapshot: flop, mode: 'training', gate: { id, kind: 'decision' } });
       model.current = new MockLanguageModelV4({ doStream: async () => textStream('ok') });
       const ok = await gated('sng-test-hand-1#3');

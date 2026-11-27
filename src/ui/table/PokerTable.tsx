@@ -113,7 +113,7 @@ function Seat({
         <div className="seat-pod">
           {seat.wonAmount != null && <span className="seat-won">+{formatTableChips(seat.wonAmount)}</span>}
           <span className={`seat-avatar${seat.isHero ? ' seat-avatar--hero' : ''}`}>
-            <SeatAvatarIcon name={seat.name} isHero={seat.isHero} />
+            <SeatAvatarIcon avatar={seat.avatar} isHero={seat.isHero} />
           </span>
           <span className="seat-info">
             <span className="seat-header-row">

@@ -7,7 +7,6 @@ import { applyAction, startHand } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
 import { mulberry32 } from '../engine/rng';
 import type { GameState } from '../engine/types';
-import { PERSONALITIES } from '../bots/personalities';
 import { useGameStore, type GameViewState } from '../store/gameStore';
 import { useSettingsStore } from '../store/settingsStore';
 
@@ -20,7 +19,7 @@ vi.mock('../engine/rng', async (original) => {
 const store = () => useGameStore.getState();
 const lineup = [
   { id: 'hero', name: 'You', isHero: true },
-  ...['shark', 'rock', 'maniac', 'fish', 'nit'].map((id) => ({ id, name: PERSONALITIES[id].name, isHero: false, personalityId: id })),
+  ...['Ivan', 'Lena', 'Mateo', 'Priya', 'Hugo'].map((name, i) => ({ id: `bot-${i + 1}`, name, isHero: false })),
 ];
 /** Card strings that appear as whole JSON string values. */
 const jsonCards = (json: string) => new Set([...json.matchAll(/"([2-9TJQKA][cdhs])"/g)].map((m) => m[1]));
@@ -46,7 +45,7 @@ describe('coach snapshot', () => {
     const controller = new TableController();
     let checked = 0, showdowns = 0, foldWins = 0, bluffShows = 0;
     const unsubscribe = useGameStore.subscribe((view: GameViewState, prev: GameViewState) => {
-      if (view.seats === prev.seats) return; // quips/log only; the snapshot ignores them
+      if (view.seats === prev.seats) return; // log only; the snapshot ignores it
       const { state: st, reveals } = controller as unknown as { state: GameState; reveals: Map<number, string> };
       const snapshot = coachSnapshot(view)!;
       coachSnapshotSchema.parse(snapshot);
@@ -93,7 +92,7 @@ describe('coach snapshot', () => {
   }, 60_000);
 
   type Act = ['fold' | 'check' | 'call' | 'raise', number?];
-  /** Dead button on busted seat 1, seat 4 busted; hand-local order: hero(0), rock(1, SB), maniac(2, BB), nit(3). */
+  /** Dead button on busted seat 1, seat 4 busted; hand-local order: hero(0), Lena(1, SB), Mateo(2, BB), Hugo(3). */
   function deadButtonHand(acts: Act[], stacks = [3000, 0, 1500, 2500, 0, 5000]) {
     const t = createTournament(lineup, 0, 't');
     t.players.forEach((p, i) => Object.assign(p, { stack: stacks[i], place: stacks[i] ? null : i === 1 ? 6 : 5 }));
@@ -124,24 +123,24 @@ describe('coach snapshot', () => {
     expect(s.players[3].committedThisHand).toBe(200);
     expect(s).toMatchObject({ pot: 1725, potBB: 34.5, currentBet: 0 });
     expect(s.forcedBets).toEqual([
-      { player: PERSONALITIES.rock.name, kind: 'small blind', amount: 25 },
-      { player: PERSONALITIES.maniac.name, kind: 'big blind', amount: 50 },
-      { player: PERSONALITIES.maniac.name, kind: 'big blind ante', amount: 50 },
+      { player: 'Lena', kind: 'small blind', amount: 25 },
+      { player: 'Mateo', kind: 'big blind', amount: 50 },
+      { player: 'Mateo', kind: 'big blind ante', amount: 50 },
     ]);
     expect(s.hero).toMatchObject({ position: 'BTN', stack: 2250, stackBB: 45, effectiveStack: 2250, effectiveStackBB: 45, sprAtStreetStart: 1.3, toCall: 0 });
     expect(s.legalActions).toMatchObject({ check: true });
     expect(s.legalActions).not.toHaveProperty('seatIndex');
     expect(s.history.map((a) => [a.street, a.player, a.position, a.action, a.raiseTo])).toEqual([
-      ['preflop', PERSONALITIES.nit.name, 'CO', 'raise', 150],
+      ['preflop', 'Hugo', 'CO', 'raise', 150],
       ['preflop', 'You', 'BTN', 'call', null],
-      ['preflop', PERSONALITIES.rock.name, 'SB', 'fold', null],
-      ['preflop', PERSONALITIES.maniac.name, 'BB', 'call', null],
-      ['flop', PERSONALITIES.maniac.name, 'BB', 'check', null],
-      ['flop', PERSONALITIES.nit.name, 'CO', 'bet', 200],
+      ['preflop', 'Lena', 'SB', 'fold', null],
+      ['preflop', 'Mateo', 'BB', 'call', null],
+      ['flop', 'Mateo', 'BB', 'check', null],
+      ['flop', 'Hugo', 'CO', 'bet', 200],
       ['flop', 'You', 'BTN', 'raise', 600],
-      ['flop', PERSONALITIES.maniac.name, 'BB', 'fold', null],
-      ['flop', PERSONALITIES.nit.name, 'CO', 'call', null],
-      ['turn', PERSONALITIES.nit.name, 'CO', 'check', null],
+      ['flop', 'Mateo', 'BB', 'fold', null],
+      ['flop', 'Hugo', 'CO', 'call', null],
+      ['turn', 'Hugo', 'CO', 'check', null],
     ]);
     expect(s.history[6]).toMatchObject({ amountAdded: 600, potBefore: 725, toCallBefore: 200, stackBefore: 2850, allIn: false });
     expect(s.players.filter((p) => !p.isHero).every((p) => p.shownCards === null)).toBe(true);
@@ -150,7 +149,7 @@ describe('coach snapshot', () => {
   it('reports street-start SPR while the hero faces a bet, and none preflop', () => {
     const s = deadButtonHand(flopBet);
     expect(s).toMatchObject({ street: 'flop', pot: 725, currentBet: 200 });
-    // Street start: 2850 effective behind (hero vs Nit) into 525.
+    // Street start: 2850 effective behind (hero vs Hugo) into 525.
     expect(s.hero).toMatchObject({ toCall: 200, effectiveStack: 2850, sprAtStreetStart: 5.43 });
     expect(deadButtonHand([['raise', 150]]).hero).toMatchObject({ toCall: 150, sprAtStreetStart: null });
   });
@@ -167,9 +166,9 @@ describe('coach snapshot', () => {
   it('records the blinds and ante a short stack actually posted', () => {
     const s = deadButtonHand([], [3000, 0, 10, 70, 0, 8920]);
     expect(s.forcedBets).toEqual([
-      { player: PERSONALITIES.rock.name, kind: 'small blind', amount: 10 },
-      { player: PERSONALITIES.maniac.name, kind: 'big blind', amount: 50 },
-      { player: PERSONALITIES.maniac.name, kind: 'big blind ante', amount: 20 },
+      { player: 'Lena', kind: 'small blind', amount: 10 },
+      { player: 'Mateo', kind: 'big blind', amount: 50 },
+      { player: 'Mateo', kind: 'big blind ante', amount: 20 },
     ]);
     expect(s.players.slice(2, 4).map((p) => [p.committedThisHand, p.allIn])).toEqual([[10, true], [70, true]]);
     expect(s.pot).toBe(80);

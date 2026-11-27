@@ -63,7 +63,7 @@ export function coachSnapshot(view: GameViewState): CoachSnapshot | null {
       payoutSharesByPlace: [...PAYOUT_SHARES],
     },
     players: view.seats.map((s) => ({
-      seat: s.seatIndex, name: s.name, isHero: s.isHero, botProfile: s.personalityTagline, position: s.position,
+      seat: s.seatIndex, name: s.name, isHero: s.isHero, position: s.position,
       stack: s.stack, stackBB: toBB(s.stack), streetBet: complete ? 0 : s.streetBet, committedThisHand: s.committed,
       folded: s.folded, allIn: s.allIn, isActing: s.isActing, eliminated: s.eliminated, finishPlace: place(s.id),
       shownCards: s.isHero ? null : s.holeCards, showdownDescription: s.showdownDescription, wonThisHand: s.wonAmount,

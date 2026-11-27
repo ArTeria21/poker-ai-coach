@@ -379,7 +379,7 @@ describe('preflop obvious-spot filter', () => {
   describe('on real snapshots (level 3: 25/50 with a 50 BBA, 50 BB stacks)', () => {
     const lineup = [
       { id: 'hero', name: 'You', isHero: true },
-      ...['shark', 'rock', 'maniac', 'fish', 'nit'].map((id) => ({ id, name: id, isHero: false, personalityId: id })),
+      ...['shark', 'rock', 'maniac', 'fish', 'nit'].map((id) => ({ id, name: id, isHero: false })),
     ];
     /** Hero holds `cards`; bots act `acts` until the hero is to act. */
     function realSpot(buttonSeat: number, cards: [string, string], acts: PlayerAction[], stack = 2500): CoachSnapshot {

@@ -1,4 +1,5 @@
-import type { SVGProps } from 'react';
+import type { ReactNode, SVGProps } from 'react';
+import { AVATARS, type Avatar } from '../bots/lineup';
 
 const baseProps: SVGProps<SVGSVGElement> = {
   fill: 'none',
@@ -99,26 +100,31 @@ export function CoachIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Deterministic FNV-1a 32-bit hash of a public player name for neutral avatar selection. */
-function hashName(name: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < name.length; i++) {
-    h ^= name.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
+const dot = (cx: number, cy: number, r = 0.9) => <circle cx={cx} cy={cy} r={r} fill="currentColor" stroke="none" />;
 
-const AVATAR_SHAPES = 6;
+/** Cute decorative figurines; they mean nothing about how a bot plays. */
+const FIGURINES: Record<Avatar, ReactNode> = {
+  shield: <><path d="M12 3.5 18.5 6v5.5c0 4.2-2.8 7.1-6.5 8.8-3.7-1.7-6.5-4.6-6.5-8.8V6L12 3.5Z" /><path d="m9.3 11.8 2 2 3.6-4" /></>,
+  sword: <><path d="M20 4 19 8.5l-8.5 8.5-3.5-3.5L15.5 5 20 4Z" /><path d="m5.5 12.5 6 6" /><path d="m8 16-3.5 3.5" /></>,
+  moon: <><path d="M15.5 4.2a8 8 0 1 0 4.3 11.3 6.5 6.5 0 0 1-4.3-11.3Z" />{dot(18.5, 6.5)}</>,
+  anchor: <><circle cx="12" cy="5.5" r="1.8" /><path d="M12 7.3V20" /><path d="M8.5 10.5h7" /><path d="M5 13.5c0 3.6 3.1 6.5 7 6.5s7-2.9 7-6.5" /></>,
+  owl: <><path d="M6 9c0-3 2.7-5 6-5s6 2 6 5v6c0 3-2.7 5-6 5s-6-2-6-5V9Z" /><path d="M6.5 6 5 3.5M17.5 6 19 3.5" /><circle cx="9.5" cy="10" r="2" /><circle cx="14.5" cy="10" r="2" /><path d="m11.2 12.8.8 1.2.8-1.2" /></>,
+  fox: <><path d="m4 4 4.5 3h7L20 4l-1 7-7 9-7-9-1-7Z" />{dot(9.5, 11)}{dot(14.5, 11)}{dot(12, 16)}</>,
+  cat: <><path d="M5 4v7c0 4.4 3.1 8 7 8s7-3.6 7-8V4l-4 3.5H9L5 4Z" />{dot(9.5, 12)}{dot(14.5, 12)}<path d="M2.5 13.5h3M18.5 13.5h3" /><path d="M11.3 15h1.4l-.7.8-.7-.8Z" /></>,
+  rocket: <><path d="M12 3c3 2.5 4.5 5.8 4.5 9.5V17h-9v-4.5C7.5 8.8 9 5.5 12 3Z" /><circle cx="12" cy="10" r="1.6" /><path d="M7.5 13.5 5 16v3l2.5-2M16.5 13.5 19 16v3l-2.5-2" /><path d="m10.5 19.5 1.5 2 1.5-2" /></>,
+  cactus: <><path d="M10 20.5V6a2 2 0 0 1 4 0v14.5" /><path d="M10 13H8a2 2 0 0 1-2-2V9" /><path d="M14 11h2a2 2 0 0 0 2-2V7.5" /><path d="M6.5 20.5h11" /></>,
+  mushroom: <><path d="M4 12a8 7 0 0 1 16 0H4Z" /><path d="M9.5 12v6a2.5 2.5 0 0 0 5 0v-6" />{dot(9, 8.5, 1)}{dot(14.5, 8, 1.2)}</>,
+  key: <><circle cx="7.5" cy="12" r="3.5" /><path d="M11 12h9.5" /><path d="M17.5 12v3M20.5 12v2.5" /></>,
+  compass: <><circle cx="12" cy="12" r="8.5" /><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8 4.8-2.2Z" />{dot(12, 12, 0.7)}</>,
+  shark: <><path d="M6 13c3-3 9-4.5 15 0-6 4.5-12 3-15 0Z" /><path d="M6 13 2.5 9.5v7L6 13Z" /><path d="m11 10.3 2-3.8 1.8 3.6" />{dot(17.5, 12.5, 0.8)}</>,
+  octopus: <><path d="M6 12a6 6.5 0 0 1 12 0H6Z" /><path d="M6 12c0 3-2 4-2.5 6M9 12.5c0 3-1 5-1.5 6.5M12 12.5v6.5M15 12.5c0 3 1 5 1.5 6.5M18 12c0 3 2 4 2.5 6" />{dot(9.5, 9)}{dot(14.5, 9)}</>,
+  feather: <><path d="M20 4c-7.5.5-12.5 5.5-13 13 7.5-.5 12.5-5.5 13-13Z" /><path d="M4 20 16.5 7.5" /></>,
+};
 const AVATAR_TONES = 5;
 
-/**
- * Minimalist 1.5px-stroke geometric player emblem.
- * Hero is identified by `isHero`; bots derive shape & tone strictly from a hash of `name`
- * so hidden bot archetypes are never leaked through the UI.
- */
-export function SeatAvatarIcon({ name, isHero }: { name: string; isHero: boolean }) {
-  if (isHero) {
+/** Seat emblem: the hero's crown, or the bot's randomly drawn decorative figurine. */
+export function SeatAvatarIcon({ avatar, isHero }: { avatar: Avatar | null; isHero: boolean }) {
+  if (isHero || !avatar) {
     return (
       <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className="seat-avatar-svg seat-avatar-svg--hero">
         <path d="M5 17h14l-1.5-8.5-3.5 3-2-5-2 5-3.5-3L5 17Z" />
@@ -126,61 +132,12 @@ export function SeatAvatarIcon({ name, isHero }: { name: string; isHero: boolean
       </svg>
     );
   }
-  const hash = hashName(name);
-  const shape = hash % AVATAR_SHAPES;
-  const tone = Math.floor(hash / AVATAR_SHAPES) % AVATAR_TONES;
-  const cls = `seat-avatar-svg seat-avatar-svg--tone${tone}`;
-  switch (shape) {
-    case 0:
-      /* Geometric diamond prism */
-      return (
-        <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className={cls} data-avatar-shape={shape}>
-          <polygon points="12,3.5 19.5,12 12,20.5 4.5,12" />
-          <polygon points="12,8.2 15.8,12 12,15.8 8.2,12" />
-        </svg>
-      );
-    case 1:
-      /* Concentric hexagon */
-      return (
-        <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className={cls} data-avatar-shape={shape}>
-          <polygon points="12,3.5 19,7.5 19,16.5 12,20.5 5,16.5 5,7.5" />
-          <polygon points="12,8 15.5,10 15.5,14 12,16 8.5,14 8.5,10" />
-        </svg>
-      );
-    case 2:
-      /* Four-point compass star */
-      return (
-        <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className={cls} data-avatar-shape={shape}>
-          <path d="M12 3.5 14.3 9.7 20.5 12l-6.2 2.3L12 20.5l-2.3-6.2L3.5 12l6.2-2.3L12 3.5Z" />
-          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
-        </svg>
-      );
-    case 3:
-      /* Minimalist geometric shield */
-      return (
-        <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className={cls} data-avatar-shape={shape}>
-          <path d="M12 3.5 18.5 6.5v5.2c0 4.2-2.7 7.1-6.5 8.8-3.8-1.7-6.5-4.6-6.5-8.8V6.5L12 3.5Z" />
-          <path d="M12 7.5v9" />
-        </svg>
-      );
-    case 4:
-      /* Orbital ring */
-      return (
-        <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className={cls} data-avatar-shape={shape}>
-          <circle cx="12" cy="12" r="7.5" />
-          <ellipse cx="12" cy="12" rx="7.5" ry="3.2" transform="rotate(-32 12 12)" />
-          <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-        </svg>
-      );
-    default:
-      /* Faceted crest */
-      return (
-        <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className={cls} data-avatar-shape={shape}>
-          <polygon points="12,4 20,18 4,18" />
-          <polygon points="12,9.5 16,16 8,16" />
-        </svg>
-      );
-  }
+  const tone = AVATARS.indexOf(avatar) % AVATAR_TONES;
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} className={`seat-avatar-svg seat-avatar-svg--tone${tone}`} data-avatar={avatar}>
+      {FIGURINES[avatar]}
+    </svg>
+  );
 }
 
 /** Precision geometric SVG felt overlay inside the poker table oval. */

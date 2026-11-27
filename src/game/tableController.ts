@@ -5,7 +5,8 @@ import type { HandEvent } from '../engine/events';
 import { applyAction, startHand } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
 import { mulberry32, randomSeed, type Rng } from '../engine/rng';
-import { PERSONALITIES, type Personality } from '../bots/personalities';
+import type { Personality } from '../bots/personalities';
+import { generateLineup, type Avatar } from '../bots/lineup';
 import { buildBotView, decideAction } from '../bots/botDecision';
 import { bluffRevealCheck } from './bluffReveal';
 import { beginTournamentHand, createTournament, settleTournamentHand, type TournamentState } from './tournament';
@@ -14,8 +15,6 @@ import { useGameStore, type GameViewState, type SeatView } from '../store/gameSt
 import { SPEED_FACTOR, useSettingsStore } from '../store/settingsStore';
 import { formatCards } from './format';
 
-const DEFAULT_BOTS = ['shark', 'rock', 'maniac', 'fish', 'nit'];
-
 /** Runs the pure hand/tournament engines and publishes public table snapshots. */
 export class TableController {
   private tournament: TournamentState | null = null;
@@ -23,6 +22,10 @@ export class TableController {
   private latestDecisionGrade: DecisionGrade | null = null;
   private handNumber = 0;
   private botRng: Rng = mulberry32(randomSeed());
+  /** Hidden bot personalities by player id: never copied into game, tournament, view or store state. */
+  private personalities = new Map<string, Personality>();
+  /** Public cosmetic figurines by bot id. */
+  private avatars = new Map<string, Avatar>();
   private pendingHuman: ((a: PlayerAction | null) => void) | null = null;
   private pendingNext: (() => void) | null = null;
   private sessionToken = 0;
@@ -32,23 +35,21 @@ export class TableController {
   private mainPotWinners: number[] = [];
   private banner: string | null = null;
   private streetHasBet = true;
-  private quipId = 0;
-  private lastQuipAt = 0;
-  private lastQuipBySeat = new Map<number, number>();
 
   startSession(heroName = 'You'): void {
     this.stop();
+    const bots = generateLineup(mulberry32(randomSeed()), heroName);
+    this.personalities = new Map(bots.map((b) => [b.id, b.personality]));
+    this.avatars = new Map(bots.map((b) => [b.id, b.avatar]));
     const lineup = [
       { id: 'hero', name: heroName, isHero: true },
-      ...DEFAULT_BOTS.map((id) => ({ id, name: PERSONALITIES[id].name, isHero: false, personalityId: id })),
+      ...bots.map(({ id, name }) => ({ id, name, isHero: false })),
     ];
     const id = `sng-${Date.now().toString(36)}-${this.sessionToken}-${randomSeed().toString(36)}`;
     this.tournament = createTournament(lineup, Math.floor(Math.random() * 6), id);
     this.state = null;
     this.handNumber = 0;
     this.botRng = mulberry32(randomSeed());
-    this.lastQuipAt = 0;
-    this.lastQuipBySeat.clear();
     useGameStore.getState().reset();
     void this.runLoop(this.sessionToken);
   }
@@ -131,8 +132,7 @@ export class TableController {
       } else {
         await this.delay(450 + this.botRng() * 950);
         if (token !== this.sessionToken) return;
-        const personality = PERSONALITIES[this.state.config.seats[seat].personalityId!];
-        action = decideAction(buildBotView(this.state, seat), personality, useSettingsStore.getState().difficulty, this.botRng).action;
+        action = decideAction(buildBotView(this.state, seat), this.personalities.get(player.id)!, useSettingsStore.getState().difficulty, this.botRng).action;
       }
       const result = applyAction(this.state, action);
       this.state = result.state;
@@ -154,44 +154,6 @@ export class TableController {
   }
 
   /**
-   * Occasionally lets a bot say something in character. Rate-limited: one
-   * quip per 6s globally and per 18s per bot, so the table never gets loud.
-   */
-  private maybeQuip(seatIndex: number, kind: keyof Personality['quips'], probability: number): void {
-    const player = this.state?.config.seats[seatIndex];
-    if (!player?.personalityId) return;
-    const now = Date.now();
-    if (now - this.lastQuipAt < 6000) return;
-    const physicalSeat = this.tournament!.players.find((p) => p.id === player.id)!.seatIndex;
-    if (now - (this.lastQuipBySeat.get(physicalSeat) ?? 0) < 18_000) return;
-    if (this.botRng() > probability) return;
-    this.emitQuip(seatIndex, kind);
-  }
-
-  /** Publishes a quip bubble unconditionally (cooldowns handled by callers). */
-  private emitQuip(seatIndex: number, kind: keyof Personality['quips']): void {
-    const player = this.state?.config.seats[seatIndex];
-    if (!player?.personalityId) return;
-    const lines = PERSONALITIES[player.personalityId].quips[kind];
-    if (lines.length === 0) return;
-    const text = lines[Math.floor(this.botRng() * lines.length)];
-    const physicalSeat = this.tournament!.players.find((p) => p.id === player.id)!.seatIndex;
-    this.lastQuipAt = Date.now();
-    this.lastQuipBySeat.set(physicalSeat, this.lastQuipAt);
-    const id = ++this.quipId;
-    const token = this.sessionToken;
-    useGameStore.getState().publish({ quips: { ...useGameStore.getState().quips, [physicalSeat]: { text, id } } });
-    setTimeout(() => {
-      if (token !== this.sessionToken) return;
-      const current = useGameStore.getState().quips;
-      if (current[physicalSeat]?.id !== id) return;
-      const next = { ...current };
-      delete next[physicalSeat];
-      useGameStore.getState().publish({ quips: next });
-    }, 4500);
-  }
-
-  /**
    * After winning without a showdown, a bot sometimes flips over a weak hand
    * to show the bluff — how often depends on personality. This is what makes
    * bluffing visible (and painful) enough to learn from.
@@ -201,10 +163,11 @@ export class TableController {
     if (!st || this.reveals.size > 0 || this.mainPotWinners.length !== 1) return false;
     const seat = this.mainPotWinners[0];
     const player = st.config.seats[seat];
-    if (!player?.personalityId) return false; // the hero shows his own bluffs
+    const personality = player && this.personalities.get(player.id);
+    if (!personality) return false; // the hero shows his own bluffs
     const ps = st.players[seat];
     const reveal = bluffRevealCheck(
-      PERSONALITIES[player.personalityId],
+      personality,
       ps.holeCards,
       st.board,
       this.botRng,
@@ -217,13 +180,12 @@ export class TableController {
       .appendLog([reveal.semiBluff
         ? `${player.name} shows the semi-bluff: ${formatCards(ps.holeCards)} — ${desc} with a live draw!`
         : `${player.name} shows the bluff: ${formatCards(ps.holeCards)} — just ${desc}!`]);
-    this.emitQuip(seat, 'showBluff');
     return true;
   }
 
   private consumeEvents(events: HandEvent[]): void {
     const name = (seat: number) => this.state!.players[seat].name;
-    // "You call" vs "Selena calls"
+    // "You call" vs "Adam calls"
     const verb = (seat: number, v: string) => (this.state!.players[seat].isHero ? v : `${v}s`);
     const lines: string[] = [];
     for (const e of events) {
@@ -250,9 +212,6 @@ export class TableController {
           else if (e.action === 'check') sounds.check();
           else if (e.allIn) sounds.allIn();
           else sounds.chips();
-          if (e.allIn && e.action === 'raise') this.maybeQuip(e.seatIndex, 'allIn', 0.5);
-          else if (e.action === 'raise') this.maybeQuip(e.seatIndex, 'raise', 0.12);
-          else if (e.action === 'fold') this.maybeQuip(e.seatIndex, 'fold', 0.08);
           if (e.action === 'fold') lines.push(`${name(e.seatIndex)} ${verb(e.seatIndex, 'fold')}`);
           else if (e.action === 'check') lines.push(`${name(e.seatIndex)} ${verb(e.seatIndex, 'check')}`);
           else if (e.action === 'call')
@@ -290,7 +249,6 @@ export class TableController {
             lines.push(`${name(w.seatIndex)} wins ${w.amount}${withHand}`);
             if (!this.banner) this.banner = `${name(w.seatIndex)} wins ${w.amount}${withHand}`;
             if (this.state!.players[w.seatIndex].isHero) sounds.win();
-            else this.maybeQuip(w.seatIndex, e.amount >= 400 ? 'bigWin' : 'win', e.amount >= 400 ? 0.7 : 0.3);
           }
           break;
         }
@@ -307,15 +265,13 @@ export class TableController {
     if (!st || !tournament) return;
     const seats: SeatView[] = tournament.players.map((player) => {
       const p = st.players.find((candidate) => candidate.id === player.id);
-      const personality = player.personalityId ? PERSONALITIES[player.personalityId] : null;
       const revealed = p ? this.reveals.has(p.seatIndex) : false;
       return {
         seatIndex: player.seatIndex,
         id: player.id,
         name: player.name,
         isHero: player.isHero,
-        avatar: player.isHero ? '🧑' : personality!.avatar,
-        personalityTagline: personality?.tagline ?? null,
+        avatar: this.avatars.get(player.id) ?? null,
         stack: p?.stack ?? player.stack,
         position: p ? positionOfSeat(st, p.seatIndex) : null,
         streetBet: p?.streetBet ?? 0,

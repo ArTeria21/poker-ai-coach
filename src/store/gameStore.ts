@@ -2,6 +2,7 @@ import type { DecisionGrade } from '../analysis/gradeHand';
 import { create } from 'zustand';
 import type { ActionType, Card, GamePhase, LegalActions, Position, PublicAction } from '../engine/types';
 import type { TournamentState } from '../game/tournament';
+import type { Avatar } from '../bots/lineup';
 
 /**
  * UI-facing snapshot of the table. SANITIZED: bot hole cards are null until
@@ -13,8 +14,8 @@ export interface SeatView {
   id: string;
   name: string;
   isHero: boolean;
-  avatar: string;
-  personalityTagline: string | null;
+  /** Decorative bot figurine; null for the hero. */
+  avatar: Avatar | null;
   stack: number;
   /** Table position this hand; null when not dealt in. */
   position: Position | null;
@@ -69,12 +70,10 @@ export interface GameViewState {
   latestDecisionGrade: DecisionGrade | null;
   /** True while the game is paused waiting for "deal next hand". */
   awaitingNext: boolean;
-  /** One-liner banner at hand end, e.g. "Selena wins 300 with a flush". */
+  /** One-liner banner at hand end, e.g. "Adam wins 300 with a flush". */
   banner: string | null;
   /** Rolling human-readable action log (most recent last). */
   log: string[];
-  /** Active table-talk bubbles by seat index. */
-  quips: Record<number, { text: string; id: number }>;
 }
 
 const initialState: GameViewState = {
@@ -95,7 +94,6 @@ const initialState: GameViewState = {
   awaitingNext: false,
   banner: null,
   log: [],
-  quips: {},
 };
 
 interface GameStore extends GameViewState {
