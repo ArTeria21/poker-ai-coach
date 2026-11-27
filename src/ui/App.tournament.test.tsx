@@ -183,7 +183,7 @@ async function mount(mode: 'free' | 'training', seed: number) {
   });
   container = document.body.appendChild(document.createElement('div'));
   root = createRoot(container);
-  await act(async () => root.render(<m.App />));
+  await act(async () => root.render(<m.App initialView="table" />));
 }
 
 async function unmount() {

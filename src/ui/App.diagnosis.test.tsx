@@ -38,7 +38,7 @@ const probeParts = () => chat.messages.flatMap((m) => m.parts).filter((p) => p.t
 const sentPart = (body: { messages: { parts: { type: string; output?: object }[] }[] }, type: string) => body.messages.at(-1)!.parts.filter((p) => p.type === type).at(-1);
 
 async function mount() {
-  await act(async () => root.render(<App />));
+  await act(async () => root.render(<App initialView="table" />));
   await tick();
 }
 async function startDiagnosis() {

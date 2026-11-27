@@ -100,6 +100,40 @@ export function CoachIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function DiagnosticsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} {...props}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3m-11-1 2 2 4-4" />
+    </svg>
+  );
+}
+
+export function MemoryIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" {...baseProps} {...props}>
+      <rect x="6" y="3" width="14" height="14" rx="3" />
+      <path d="M16 21H7a3 3 0 0 1-3-3V9m6-1h6m-6 4h4" />
+    </svg>
+  );
+}
+
+export function ArrowRightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" {...baseProps} {...props}>
+      <path d="M4 12h16m-6-6 6 6-6 6" />
+    </svg>
+  );
+}
+
+export function CloseIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" {...baseProps} {...props}>
+      <path d="m6 6 12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
 const dot = (cx: number, cy: number, r = 0.9) => <circle cx={cx} cy={cy} r={r} fill="currentColor" stroke="none" />;
 
 /** Cute decorative figurines; they mean nothing about how a bot plays. */

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useSettingsStore, type GameSpeed } from '../store/settingsStore';
 import { tableController } from '../game/tableController';
@@ -7,12 +7,26 @@ import { PokerTable } from './table/PokerTable';
 import { ActionBar } from './table/ActionBar';
 import { TournamentPanel } from './TournamentPanel';
 import { CoachChat } from './CoachChat';
+import { LandingPage } from './LandingPage';
+import { MemoryDrawer } from './MemoryDrawer';
 import { Segmented } from './Segmented';
 import { BrandSpadeIcon, ChipsBBIcon, CoachIcon, DeckColorIcon, SoundOffIcon, SoundOnIcon, TableIcon } from './Icons';
-import { connectTraining, lockedGate, useDiagnosisStore, useTrainingStore } from './coachSession';
+import { connectTraining, loadMemoryStatus, lockedGate, startDiagnosis, useDiagnosisStore, useTrainingStore } from './coachSession';
 import './App.css';
 
-export function App() {
+export type AppView = 'landing' | 'table';
+export interface AppProps {
+  initialView?: AppView;
+}
+
+export function App({ initialView = 'landing' }: AppProps) {
+  const [view, setView] = useState<AppView>(initialView);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const sessionStarted = useRef(false);
+  const memoryStatusLoaded = useRef(false);
+  const memoryTrigger = useRef<HTMLButtonElement | null>(null);
+  const handNumber = useGameStore((s) => s.handNumber);
+  const initialized = useDiagnosisStore((s) => s.initialized);
   const tournament = useGameStore((s) => s.tournament);
   const seats = useGameStore((s) => s.seats);
   const tableAttention = useGameStore((s) => s.heroLegal !== null || s.awaitingNext);
@@ -22,52 +36,98 @@ export function App() {
 
   useEffect(() => {
     const disconnect = connectTraining();
-    tableController.startSession();
+    if (!memoryStatusLoaded.current) {
+      memoryStatusLoaded.current = true;
+      void loadMemoryStatus();
+    }
     return () => {
       tableController.stop();
+      sessionStarted.current = false;
       disconnect();
     };
   }, []);
 
+  useEffect(() => {
+    if (view !== 'table' || sessionStarted.current) return;
+    sessionStarted.current = true;
+    tableController.startSession();
+  }, [view]);
+
+  const onEnterTournament = () => {
+    setMemoryOpen(false);
+    setMobilePane('table');
+    setView('table');
+  };
+  const onStartDiagnostics = () => {
+    setMemoryOpen(false);
+    setMobilePane('coach');
+    setView('table');
+    if (!sessionStarted.current) {
+      sessionStarted.current = true;
+      tableController.startSession();
+    }
+    startDiagnosis();
+  };
+  const onOpenMemory = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    memoryTrigger.current = event.currentTarget;
+    setMemoryOpen(true);
+  }, []);
+  const onCloseMemory = useCallback(() => setMemoryOpen(false), []);
+
+  useEffect(() => {
+    // Restore only after React removes inert; pointer clicks need not focus buttons on macOS.
+    if (!memoryOpen && memoryTrigger.current?.isConnected) memoryTrigger.current.focus();
+  }, [memoryOpen]);
+
   return (
-    <div className="app">
-      <Header />
-      <nav className="mobile-tabs" aria-label="Workspace view">
-        <button
-          type="button"
-          className={`mobile-tab${mobilePane === 'table' ? ' mobile-tab--active' : ''}`}
-          aria-pressed={mobilePane === 'table'}
-          onClick={() => setMobilePane('table')}
-        >
-          <TableIcon />
-          <span>Table</span>
-          {tableAttention && <span className="mobile-dot" aria-hidden="true" />}
-        </button>
-        <button
-          type="button"
-          className={`mobile-tab${mobilePane === 'coach' ? ' mobile-tab--active' : ''}`}
-          aria-pressed={mobilePane === 'coach'}
-          onClick={() => setMobilePane('coach')}
-        >
-          <CoachIcon />
-          <span>Coach Dan</span>
-          {(coachAttention || diagnosisActive) && <span className="mobile-dot" aria-hidden="true" />}
-        </button>
-      </nav>
-      <main className="main-row">
-        <div className={`play-column${mobilePane === 'table' ? '' : ' mobile-pane--hidden'}`}>
-          {tournament && <TournamentPanel tournament={tournament} seats={seats} />}
-          <HandLog />
-          <PokerTable />
-          <ActionBar />
-        </div>
-        <CoachChat className={mobilePane === 'coach' ? '' : 'mobile-pane--hidden'} />
-      </main>
-    </div>
+    <>
+      <div className="app" inert={memoryOpen}>
+        {view === 'landing' ? (
+          <LandingPage initialized={initialized} hasActiveSession={sessionStarted.current} handNumber={handNumber}
+            onEnterTournament={onEnterTournament} onStartDiagnostics={onStartDiagnostics} onOpenMemory={onOpenMemory} />
+        ) : (
+          <>
+            <Header onBackToLanding={() => setView('landing')} />
+            <nav className="mobile-tabs" aria-label="Workspace view">
+              <button
+                type="button"
+                className={`mobile-tab${mobilePane === 'table' ? ' mobile-tab--active' : ''}`}
+                aria-pressed={mobilePane === 'table'}
+                onClick={() => setMobilePane('table')}
+              >
+                <TableIcon />
+                <span>Table</span>
+                {tableAttention && <span className="mobile-dot" aria-hidden="true" />}
+              </button>
+              <button
+                type="button"
+                className={`mobile-tab${mobilePane === 'coach' ? ' mobile-tab--active' : ''}`}
+                aria-pressed={mobilePane === 'coach'}
+                onClick={() => setMobilePane('coach')}
+              >
+                <CoachIcon />
+                <span>Coach Dan</span>
+                {(coachAttention || diagnosisActive) && <span className="mobile-dot" aria-hidden="true" />}
+              </button>
+            </nav>
+            <main className="main-row">
+              <div className={`play-column${mobilePane === 'table' ? '' : ' mobile-pane--hidden'}`}>
+                {tournament && <TournamentPanel tournament={tournament} seats={seats} />}
+                <HandLog />
+                <PokerTable />
+                <ActionBar />
+              </div>
+              <CoachChat className={mobilePane === 'coach' ? '' : 'mobile-pane--hidden'} onOpenMemory={onOpenMemory} />
+            </main>
+          </>
+        )}
+      </div>
+      <MemoryDrawer open={memoryOpen} onClose={onCloseMemory} onStartDiagnostics={onStartDiagnostics} onEnterTournament={onEnterTournament} />
+    </>
   );
 }
 
-function Header() {
+function Header({ onBackToLanding }: { onBackToLanding: () => void }) {
   const handNumber = useGameStore((s) => s.handNumber);
   const status = useGameStore((s) => s.status);
   const difficulty = useSettingsStore((s) => s.difficulty);
@@ -105,10 +165,10 @@ function Header() {
 
   return (
     <header className="header">
-      <div className="brand">
+      <button type="button" className="brand brand--button" onClick={onBackToLanding} title="Back to overview">
         <span className="brand-suit"><BrandSpadeIcon /></span>
         <h1>Poker AI-Coach</h1>
-      </div>
+      </button>
       <div className="header-meta">
         <span className="meta-item">6-max SNG · Hand #{handNumber || 1}</span>
       </div>

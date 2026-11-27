@@ -1,12 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { DIAGNOSIS_PREFIX } from '../agent/contract';
 import { useChat } from '@ai-sdk/react';
 import type { Mode } from '../agent/training';
 import { useSettingsStore } from '../store/settingsStore';
-import { MicIcon } from './Icons';
+import { MemoryIcon, MicIcon } from './Icons';
 import { Segmented } from './Segmented';
 import {
-  chat, dispatch, isQuestion, loadMemoryStatus, lockedGate, openQuestion, retry, sendUserText, setTrainingMode, startDiagnosis, stopDan, stopDiagnosis,
+  chat, dispatch, isQuestion, lockedGate, openQuestion, retry, sendUserText, setTrainingMode, startDiagnosis, stopDan, stopDiagnosis,
   useDiagnosisStore, useTrainingStore, type DanMessage, type TriggerMeta,
 } from './coachSession';
 import { AnsweredQuestion, AssessmentCard, QuestionForm, Skipped } from './DiagnosisCards';
@@ -73,7 +73,7 @@ const isTool = (part: Part): part is ToolPart => part.type.startsWith('tool-');
 const isDiagnosisStart = (message: DanMessage) =>
   message.role === 'user' && message.parts.some((p) => p.type === 'text' && p.text.startsWith(DIAGNOSIS_PREFIX));
 
-export function CoachChat({ className = '' }: { className?: string } = {}) {
+export function CoachChat({ className = '', onOpenMemory }: { className?: string; onOpenMemory?: (event: MouseEvent<HTMLButtonElement>) => void } = {}) {
   const { messages, status, error } = useChat<DanMessage>({ chat });
   const mode = useSettingsStore((s) => s.mode);
   // The latest request's gate, while still locked; after an error or Stop nobody else can release it, so the player may go on without Dan.
@@ -107,7 +107,6 @@ export function CoachChat({ className = '' }: { className?: string } = {}) {
     caret.current = null;
   }, [input]);
 
-  useEffect(() => { void loadMemoryStatus(); }, []);
   // A client-side TypeError hides behind the lost-connection text: keep the raw one in the console, once per error.
   useEffect(() => { if (error instanceof TypeError) console.warn('[chat]', error); }, [error]);
 
@@ -139,6 +138,7 @@ export function CoachChat({ className = '' }: { className?: string } = {}) {
           <h2>Dan</h2>
         </div>
         <div className="chat-header-actions">
+          {onOpenMemory && <button type="button" className="chat-header-btn" onClick={onOpenMemory}><MemoryIcon width={13} height={13} /> Memory</button>}
           {diagnosis
             ? <button type="button" className="chat-header-btn chat-header-btn--active" onClick={stopDiagnosis}>Stop diagnosis</button>
             : <button type="button" className="chat-header-btn" disabled={busy} onClick={startDiagnosis}>Diagnose level</button>}

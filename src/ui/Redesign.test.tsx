@@ -250,7 +250,7 @@ describe('Botanical Casino Glasshouse UI & fixes', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ initialized: true }));
     const startSpy = vi.spyOn(tableController, 'startSession').mockImplementation(() => {});
 
-    await act(async () => root.render(<App />));
+    await act(async () => root.render(<App initialView="table" />));
     expect(startSpy).toHaveBeenCalledTimes(1);
 
     const bbBtn = container.querySelector<HTMLButtonElement>('button[aria-label="Show big blinds"]')!;

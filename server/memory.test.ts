@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  appendHighlight, MemoryInputError, memoryFile, parseKnowledgeMap, readHighlights, renderKnowledgeMap, updateKnowledgeMap, validateWorkingState, writeWorkingState,
+  appendHighlight, MemoryInputError, memoryFile, parseKnowledgeMap, readHighlights, readMemoryOverview, renderKnowledgeMap, updateKnowledgeMap, validateWorkingState, writeWorkingState,
   type KnowledgeMap,
 } from './memory';
 import { TOPIC_IDS } from '../src/agent/contract';
@@ -23,6 +23,38 @@ const workingState = (extraLines = 0) => [
   ...Array.from({ length: extraLines }, (_, i) => `- line ${i}`),
 ].join('\n');
 const mapText = () => readFile(memoryFile('knowledge-map.md'), 'utf8');
+
+describe('memory overview', () => {
+  it('returns an empty overview without creating files', async () => {
+    expect(await readMemoryOverview()).toEqual({ initialized: false, workingState: null, knowledgeMap: null, highlights: { total: 0, entries: [] } });
+    expect(await readdir(dir)).toEqual([]);
+  });
+
+  it('splits reordered CRLF sections and exposes the full catalog, bottlenecks and highlights', async () => {
+    const raw = '# Working State\r\n## Student Profile\r\n  Игрок SNG  \r\n## Current Workbench\r\n- Защита BB\r\n### Next spot\r\nПроверить цену\r\n## Conventions\r\n- Считать в BB\r\n';
+    await writeWorkingState(raw);
+    await updateKnowledgeMap([{ op: 'set_topic', topic: 'pot-odds', status: 2 }, { op: 'add', id: 'wide-defense', title: 'Слишком широкая защита' }], 'hand-1');
+    await updateKnowledgeMap([{ op: 'overcome', id: 'wide-defense' }], 'hand-2');
+    await appendHighlight({ spot: 'BB против рейза', independence: 2, takeaway: 'Учесть цену колла' }, 'hand-2');
+    const overview = await readMemoryOverview();
+    expect(overview.initialized).toBe(true);
+    expect(overview.workingState).toEqual({ raw: await readFile(memoryFile('working-state.md'), 'utf8'), sections: {
+      studentProfile: 'Игрок SNG', workbench: '- Защита BB\n### Next spot\nПроверить цену', conventions: '- Считать в BB',
+    } });
+    expect(overview.knowledgeMap?.topics.map((t) => t.id)).toEqual(TOPIC_IDS);
+    expect(overview.knowledgeMap?.topics.find((t) => t.id === 'pot-odds')).toEqual({ id: 'pot-odds', title: 'Шансы банка и требуемое эквити', status: 2, label: 'Guided practice' });
+    expect(overview.knowledgeMap?.bottlenecks).toEqual([{ id: 'wide-defense', title: 'Слишком широкая защита', seen: 'hand-1', overcome: ['hand-2'], target: 3 }]);
+    expect(overview.highlights).toMatchObject({ total: 1, entries: [{ handId: 'hand-2', independence: 2, spot: 'BB против рейза', takeaway: 'Учесть цену колла' }] });
+  });
+
+  it('retains partial memory and reports grammar errors without rewriting the edited map', async () => {
+    await writeFile(memoryFile('knowledge-map.md'), '# Hand edited\n');
+    await appendHighlight({ spot: 'Spot', independence: 1, takeaway: 'Takeaway' }, 'hand-1');
+    const overview = await readMemoryOverview();
+    expect(overview).toMatchObject({ initialized: false, workingState: null, knowledgeMap: null, knowledgeMapError: expect.stringMatching(/line 1 is not in the grammar/), highlights: { total: 1 } });
+    expect(await mapText()).toBe('# Hand edited\n');
+  });
+});
 
 describe('knowledge map grammar', () => {
   it('round-trips deterministically', () => {

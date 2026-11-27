@@ -40,6 +40,9 @@
 }
 
 .chat-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-btn);
   padding: 6px 13px;

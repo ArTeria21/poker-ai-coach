@@ -244,6 +244,55 @@ export async function readHighlights() {
 /** True once a working state exists (after the diagnosis or Dan's first write). */
 export const memoryInitialized = () => access(memoryFile('working-state.md')).then(() => true, () => false);
 
+export interface MemoryOverview {
+  initialized: boolean;
+  workingState: {
+    raw: string;
+    sections: { workbench: string; conventions: string; studentProfile: string };
+  } | null;
+  knowledgeMap: {
+    topics: Array<{ id: TopicId; title: string; status: number; label: string }>;
+    bottlenecks: Array<Bottleneck & { target: number }>;
+  } | null;
+  knowledgeMapError?: string;
+  highlights: { total: number; entries: Highlight[] };
+}
+
+/** Read-only inspection: a hand-edited map must not hide the other memory files. */
+export async function readMemoryOverview(): Promise<MemoryOverview> {
+  const [raw, mapText, highlights] = await Promise.all([
+    readText(memoryFile('working-state.md')), readText(memoryFile('knowledge-map.md')), readHighlights(),
+  ]);
+  const sections = { workbench: '', conventions: '', studentProfile: '' };
+  const headings = { 'Current Workbench': 'workbench', Conventions: 'conventions', 'Student Profile': 'studentProfile' } as const;
+  let section: keyof typeof sections | null = null;
+  for (const line of (raw ?? '').split(/\r?\n/)) {
+    if (line.startsWith('## ')) {
+      const heading = line.slice(3).trimEnd();
+      section = Object.hasOwn(headings, heading) ? headings[heading as keyof typeof headings] : null;
+    } else if (section) sections[section] += `${line}\n`;
+  }
+  for (const key of Object.keys(sections) as Array<keyof typeof sections>) sections[key] = sections[key].trim();
+  const overview: MemoryOverview = {
+    initialized: raw !== null,
+    workingState: raw === null ? null : { raw, sections },
+    knowledgeMap: null,
+    highlights,
+  };
+  if (mapText !== null) {
+    try {
+      const map = parseKnowledgeMap(mapText);
+      overview.knowledgeMap = {
+        topics: TOPIC_IDS.map((id) => ({ id, title: TOPICS[id], status: map.topics[id], label: STATUS_LABELS[map.topics[id]] })),
+        bottlenecks: map.bottlenecks.map((b) => ({ ...b, target: OVERCOME_TO_REMOVE })),
+      };
+    } catch (error) {
+      overview.knowledgeMapError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return overview;
+}
+
 /** The files injected into every prompt; null when missing. */
 export async function readInjectedMemory() {
   const [workingState, knowledgeMap] = await Promise.all([readText(memoryFile('working-state.md')), readText(memoryFile('knowledge-map.md'))]);

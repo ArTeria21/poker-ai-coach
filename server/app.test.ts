@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import type { CoachSnapshot } from '../src/agent/contract';
 import { app } from './app';
+import { appendHighlight, updateKnowledgeMap, writeWorkingState } from './memory';
 
 const model = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: () => () => model.current }));
@@ -44,6 +45,31 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.unstubAllEnvs();
   await rm(memoryDir, { recursive: true, force: true });
+});
+
+describe('GET /api/memory', () => {
+  it('serves empty and populated memory without a configured coach', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    const empty = await app.request('/api/memory');
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toEqual({ initialized: false, workingState: null, knowledgeMap: null, highlights: { total: 0, entries: [] } });
+    await writeWorkingState('## Current Workbench\n- ICM\n## Conventions\n- BB\n## Student Profile\n- SNG');
+    await updateKnowledgeMap([{ op: 'set_topic', topic: 'icm-bubble', status: 3 }], null);
+    await appendHighlight({ spot: 'Bubble', independence: 3, takeaway: 'Pressure' }, 'h-4');
+    const populated = await app.request('/api/memory');
+    expect(populated.status).toBe(200);
+    const data = await populated.json();
+    expect(data).toMatchObject({ initialized: true, workingState: { sections: { workbench: '- ICM', conventions: '- BB', studentProfile: '- SNG' } }, highlights: { total: 1, entries: [{ handId: 'h-4' }] } });
+    expect(data.knowledgeMap.topics).toHaveLength(12);
+    expect(data.knowledgeMap.topics.find((t: { id: string }) => t.id === 'icm-bubble')).toMatchObject({ status: 3, label: 'Mastered' });
+  });
+
+  it('returns a useful overview with a map error instead of a 500', async () => {
+    await writeFile(join(memoryDir, 'knowledge-map.md'), 'bad grammar');
+    const res = await app.request('/api/memory');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ knowledgeMap: null, knowledgeMapError: expect.stringContaining('not in the grammar') });
+  });
 });
 
 describe('POST /api/chat', () => {

@@ -33,7 +33,7 @@ it('plays silently without calling the coach, and sends one request with the sna
   const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'Coach is not configured' }, { status: 503 }));
   const container = document.body.appendChild(document.createElement('div'));
   const root = createRoot(container);
-  await act(async () => root.render(<App />));
+  await act(async () => root.render(<App initialView="table" />));
 
   for (let hand = 0; hand < 4; hand++) {
     for (let i = 0; i < 500 && !store().awaitingNext; i++) {
