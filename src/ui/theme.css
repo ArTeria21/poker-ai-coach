@@ -1,34 +1,81 @@
 :root {
-  /* the midnight card room */
-  --room-0: #0b0e0c;
-  --room-1: #11150f;
-  --felt-hi: #245c41;
-  --felt-lo: #0e2b1d;
-  --rail-hi: #3b2c1d;
-  --rail-lo: #17100a;
-  --brass: #c9a25e;
-  --brass-bright: #ecd9a8;
-  --cream: #f2ead8;
-  --cream-dim: #b9b3a2;
-  --muted: #7c847a;
-  --card-face: #faf7ee;
-  --card-red: #b93a2b;
-  --card-black: #24211c;
-  --card-back-1: #7e2f26;
-  --card-back-2: #4c1712;
-  --fold: #8c4a3a;
-  --call: #3f7a5a;
-  --raise: #c9a25e;
-  --danger: #d4593e;
-  --win-glow: rgba(233, 200, 128, 0.55);
+  /* Botanical Casino Glasshouse — DESIGN.md + refined felt & brass */
+  --color-forest-ink: #004737;
+  --color-forest-mid: #01382b;
+  --color-forest-deep: #022b21;
+  --color-deep-loam: #032019;
+  --color-loam-room: #041712;
+  --color-mint-pulse: #56f09f;
+  --color-mint-mist: #d4ffe8;
+  --color-cream-canvas: #fffbec;
+  --color-bone: #faf2d5;
+  --color-sage-whisper: #99b5af;
+  --color-stone-mist: #ccdad7;
 
-  --font-display: 'Fraunces', 'Georgia', serif;
-  --font-ui: 'Schibsted Grotesk', 'Segoe UI', sans-serif;
-  --font-mono: 'Spline Sans Mono', 'Consolas', monospace;
+  /* Warm Champagne Brass — casino heritage accent */
+  --color-brass: #d8b46a;
+  --color-brass-bright: #f3dfaa;
+  --color-brass-muted: rgba(216, 180, 106, 0.22);
+
+  /* Semantic aliases */
+  --room-0: var(--color-loam-room);
+  --room-1: var(--color-deep-loam);
+  --felt-hi: #005844;
+  --felt-mid: var(--color-forest-ink);
+  --felt-lo: #022a20;
+  --rail-hi: #21241f;
+  --rail-lo: #0a1410;
+  --brass: var(--color-brass);
+  --brass-bright: var(--color-brass-bright);
+  --cream: var(--color-cream-canvas);
+  --cream-dim: var(--color-stone-mist);
+  --muted: var(--color-sage-whisper);
+
+  /* Cards (Warm Ivory / Bone) */
+  --card-face: var(--color-cream-canvas);
+  --card-face-edge: var(--color-bone);
+  --card-red: #b83a2d;
+  --card-blue: #1e6091;
+  --card-green: #147a4b;
+  --card-black: var(--color-deep-loam);
+  --card-back-1: var(--color-forest-ink);
+  --card-back-2: #022920;
+
+  /* Actions & Status */
+  --fold: #a84b3c;
+  --call: #187958;
+  --raise: var(--color-brass);
+  --danger: #e26d5a;
+  --win-glow: rgba(216, 180, 106, 0.45);
+  --mint-glow: rgba(86, 240, 159, 0.28);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(3, 32, 25, 0.72);
+  --glass-bg-soft: rgba(3, 28, 22, 0.56);
+  --glass-bg-elevated: rgba(2, 24, 19, 0.92);
+  --glass-border: rgba(212, 255, 232, 0.14);
+  --glass-border-strong: rgba(212, 255, 232, 0.24);
+  --glass-border-brass: rgba(216, 180, 106, 0.26);
+  --glass-highlight: inset 0 1px 0 rgba(255, 251, 236, 0.08);
+  --glass-blur: blur(14px);
+
+  /* Typography */
+  --font-display: 'Schibsted Grotesk', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-ui: 'Plus Jakarta Sans', 'Schibsted Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Spline Sans Mono', ui-monospace, 'Consolas', monospace;
+
+  /* Radii (DESIGN.md geometry) */
+  --radius-panel: 19px;
+  --radius-card: 15px;
+  --radius-btn: 40px;
+  --radius-pill: 9999px;
+  --radius-chip: 10px;
 }
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(153, 181, 175, 0.28) transparent;
 }
 
 html,
@@ -40,25 +87,16 @@ body,
 
 body {
   background:
-    radial-gradient(1200px 700px at 50% -10%, rgba(201, 162, 94, 0.1), transparent 60%),
-    radial-gradient(900px 600px at 50% 115%, rgba(20, 60, 40, 0.25), transparent 60%),
-    var(--room-0);
-  color: var(--cream);
+    radial-gradient(1100px 640px at 50% -12%, rgba(0, 71, 55, 0.48), transparent 62%),
+    radial-gradient(760px 520px at 18% 105%, rgba(86, 240, 159, 0.06), transparent 60%),
+    radial-gradient(680px 500px at 84% 108%, rgba(216, 180, 106, 0.06), transparent 60%),
+    var(--color-loam-room);
+  color: var(--color-cream-canvas);
   font-family: var(--font-ui);
-  /* desktop-only layout: below the app min-width, scroll sideways instead of squeezing */
-  overflow: auto hidden;
+  font-weight: 400;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
-}
-
-/* film grain over the whole room */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-  z-index: 40;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button {
@@ -66,13 +104,28 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-mint-pulse);
+  outline-offset: 2px;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #2c332c;
-  border-radius: 4px;
+  background: rgba(153, 181, 175, 0.28);
+  border-radius: 9999px;
 }
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 255, 232, 0.42);
+}
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }

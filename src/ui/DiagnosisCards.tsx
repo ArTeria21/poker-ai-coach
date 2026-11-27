@@ -104,13 +104,19 @@ function OptionList({ options, order, picked, correct }: { options: DisplayOptio
     <ul className="q-options">
       {options.map((o, i) => {
         const index = i + 1;
-        const state = correct?.has(index) ? ' q-option--correct' : picked.has(index) && correct ? ' q-option--wrong' : picked.has(index) ? ' q-option--picked' : '';
+        const isPicked = picked.has(index);
+        const isCorrect = correct?.has(index) ?? false;
+        const state = isCorrect ? ' q-option--correct' : isPicked && correct ? ' q-option--wrong' : isPicked ? ' q-option--picked' : '';
         return (
           <li key={o.value} className={`q-option q-option--static${state}`}>
-            <Mark order={order} index={index} on={picked.has(index)} />
-            <span>{o.label}</span>
-            {picked.has(index) && <span className="q-tag">your pick</span>}
-            {correct?.has(index) && <span className="q-tag">correct</span>}
+            <Mark order={order} index={index} on={isPicked} />
+            <span className="q-option-label">{o.label}</span>
+            {(isPicked || isCorrect) && (
+              <span className="q-tags">
+                {isPicked && <span className="q-tag q-tag--picked">your pick</span>}
+                {isCorrect && <span className="q-tag q-tag--correct">correct</span>}
+              </span>
+            )}
           </li>
         );
       })}

@@ -1,30 +1,39 @@
 import { useGameStore } from '../../store/gameStore';
 import type { SeatView } from '../../store/gameStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { formatChips } from '../../game/format';
+import { FeltOverlaySvg, SeatAvatarIcon } from '../Icons';
 import { CardView } from './CardView';
 import './PokerTable.css';
+
+const formatBB = (chips: number, bigBlind: number) => `${(chips / Math.max(1, bigBlind)).toFixed(1)} BB`;
 
 export function PokerTable() {
   const seats = useGameStore((s) => s.seats);
   const board = useGameStore((s) => s.board);
   const pot = useGameStore((s) => s.pot);
+  const bigBlind = useGameStore((s) => s.bigBlind);
   const phase = useGameStore((s) => s.phase);
   const banner = useGameStore((s) => s.banner);
-  const quips = useGameStore((s) => s.quips);
+  const displayBB = useSettingsStore((s) => s.displayBB);
 
   const heroIndex = seats.find((s) => s.isHero)?.seatIndex ?? 0;
   const displaySlot = (seatIndex: number) => (seatIndex - heroIndex + 6) % 6;
+  const formatTableChips = (chips: number) => (displayBB ? formatBB(chips, bigBlind) : formatChips(chips));
 
   return (
     <div className="table-zone">
       <div className="table-oval">
         <div className="table-rail" />
-        <div className="table-felt" />
+        <div className="table-felt">
+          <FeltOverlaySvg />
+        </div>
 
         <div className="table-center">
           <div className="pot-pill">
             <span className="pot-label">POT</span>
-            <span className="pot-amount">{formatChips(pot)}</span>
+            <span className="pot-amount" title={formatBB(pot, bigBlind)}>{formatTableChips(pot)}</span>
+            {!displayBB && pot > 0 && <span className="pot-bb">{formatBB(pot, bigBlind)}</span>}
           </div>
           <div className="board-row">
             {board.map((card, i) => (
@@ -34,17 +43,21 @@ export function PokerTable() {
               <div key={`slot-${i}`} className="board-slot" />
             ))}
           </div>
-          {phase && phase !== 'complete' && <div className="phase-tag">{phase}</div>}
+          {banner ? (
+            <div className="result-banner" role="status">{banner}</div>
+          ) : (
+            phase && phase !== 'complete' && <div className="phase-tag">{phase}</div>
+          )}
         </div>
-
-        {banner && <div className="result-banner">{banner}</div>}
 
         {seats.map((seat) => (
           <Seat
             key={seat.seatIndex}
             seat={seat}
             slot={displaySlot(seat.seatIndex)}
-            quip={quips[seat.seatIndex]?.text ?? null}
+            bigBlind={bigBlind}
+            displayBB={displayBB}
+            showBetChip={seat.lastAction !== null && phase !== 'complete'}
           />
         ))}
       </div>
@@ -52,7 +65,19 @@ export function PokerTable() {
   );
 }
 
-function Seat({ seat, slot, quip }: { seat: SeatView; slot: number; quip: string | null }) {
+function Seat({
+  seat,
+  slot,
+  bigBlind,
+  displayBB,
+  showBetChip,
+}: {
+  seat: SeatView;
+  slot: number;
+  bigBlind: number;
+  displayBB: boolean;
+  showBetChip: boolean;
+}) {
   const classes = [
     'seat',
     `seat--pos${slot}`,
@@ -65,6 +90,7 @@ function Seat({ seat, slot, quip }: { seat: SeatView; slot: number; quip: string
     .join(' ');
 
   const cardSize = seat.isHero ? 'hole' : 'mini';
+  const formatTableChips = (chips: number) => (displayBB ? formatBB(chips, bigBlind) : formatChips(chips));
 
   return (
     <>
@@ -85,26 +111,44 @@ function Seat({ seat, slot, quip }: { seat: SeatView; slot: number; quip: string
           </div>
         )}
         <div className="seat-pod">
-          {quip && <div className="seat-quip">{quip}</div>}
-          {seat.wonAmount != null && <span className="seat-won">+{formatChips(seat.wonAmount)}</span>}
-          <span className="seat-avatar">{seat.avatar}</span>
+          {seat.wonAmount != null && <span className="seat-won">+{formatTableChips(seat.wonAmount)}</span>}
+          <span className={`seat-avatar${seat.isHero ? ' seat-avatar--hero' : ''}`}>
+            <SeatAvatarIcon name={seat.name} isHero={seat.isHero} />
+          </span>
           <span className="seat-info">
-            <span className="seat-name">{seat.name}</span>
-            <span className={`seat-stack${seat.allIn ? ' seat-stack--allin' : ''}`}>
-              {seat.eliminated ? 'OUT' : seat.allIn ? 'ALL-IN' : formatChips(seat.stack)}
+            <span className="seat-header-row">
+              <span className="seat-name">{seat.name}</span>
+              {seat.position && !seat.eliminated && (
+                <span className={`seat-pos${seat.isHero ? ' seat-pos--hero' : ''}`}>{seat.position}</span>
+              )}
+            </span>
+            <span className="seat-stack-row">
+              <span
+                className={`seat-stack${seat.allIn ? ' seat-stack--allin' : ''}`}
+                title={!seat.eliminated && !seat.allIn ? formatBB(seat.stack, bigBlind) : undefined}
+              >
+                {seat.eliminated ? 'OUT' : seat.allIn ? 'ALL-IN' : formatTableChips(seat.stack)}
+              </span>
+              {seat.isHero && !seat.eliminated && !seat.allIn && !displayBB && (
+                <span className="seat-bb">{formatBB(seat.stack, bigBlind)}</span>
+              )}
             </span>
           </span>
         </div>
         {seat.showdownDescription && <div className="seat-descr">{seat.showdownDescription}</div>}
       </div>
 
-      {(seat.streetBet > 0 || seat.isButton || seat.lastAction) && (
+      {(seat.isButton || showBetChip) && (
         <div className={`bet-spot bet-spot--pos${slot}`}>
-          {seat.isButton && <span className="dealer-button" title={seat.eliminated ? 'Dead button' : 'Dealer button'}>D</span>}
-          {seat.lastAction && (
+          {seat.isButton && (
+            <span className="dealer-button" title={seat.eliminated ? 'Dead button' : 'Dealer button'}>
+              D
+            </span>
+          )}
+          {showBetChip && seat.lastAction && (
             <span className="bet-chip" key={`${seat.lastAction.type}-${seat.lastAction.amount}`}>
               <span className="bet-action">{actionLabel(seat)}</span>
-              {seat.lastAction.amount > 0 && <span>{formatChips(seat.lastAction.amount)}</span>}
+              {seat.lastAction.amount > 0 && <span>{formatTableChips(seat.lastAction.amount)}</span>}
             </span>
           )}
         </div>

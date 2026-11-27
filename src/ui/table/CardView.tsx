@@ -1,5 +1,6 @@
 import type { Card } from '../../engine/types';
 import { isRedSuit, rankLabel, suitSymbol } from '../../game/format';
+import { useSettingsStore } from '../../store/settingsStore';
 
 interface CardViewProps {
   /** Undefined renders a face-down card back. */
@@ -10,7 +11,22 @@ interface CardViewProps {
   dimmed?: boolean;
 }
 
+function suitColorClass(card: Card, fourColorDeck: boolean): string {
+  if (!fourColorDeck) return isRedSuit(card) ? 'card--red' : 'card--black';
+  switch (card[1]) {
+    case 'h':
+      return 'card--red';
+    case 'd':
+      return 'card--blue';
+    case 'c':
+      return 'card--green';
+    default:
+      return 'card--black';
+  }
+}
+
 export function CardView({ card, size = 'board', dealIndex = 0, dimmed = false }: CardViewProps) {
+  const fourColorDeck = useSettingsStore((s) => s.fourColorDeck);
   const classes = ['card', `card--${size}`, dimmed ? 'card--dimmed' : '']
     .filter(Boolean)
     .join(' ');
@@ -21,10 +37,9 @@ export function CardView({ card, size = 'board', dealIndex = 0, dimmed = false }
       </div>
     );
   }
-  const red = isRedSuit(card);
   return (
     <div
-      className={`${classes} ${red ? 'card--red' : 'card--black'}`}
+      className={`${classes} ${suitColorClass(card, fourColorDeck)}`}
       style={{ animationDelay: `${dealIndex * 90}ms` }}
     >
       <span className="card-corner">

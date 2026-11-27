@@ -1,10 +1,35 @@
+import { useEffect, useRef, useState } from 'react';
 import { BLIND_LEVELS, HANDS_PER_LEVEL, PAYOUT_SHARES, type TournamentState } from '../game/tournament';
 import { formatChips } from '../game/format';
 import type { SeatView } from '../store/gameStore';
+import { ChevronDownIcon } from './Icons';
 
 const percent = (share: number) => new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 4 }).format(share);
 
 export function TournamentPanel({ tournament, seats }: { tournament: TournamentState; seats: SeatView[] }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (detailsRef.current && !detailsRef.current.contains(e.target as Node)) {
+        detailsRef.current.open = false;
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && detailsRef.current) {
+        detailsRef.current.open = false;
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isOpen]);
+
   const live = tournament.players.filter((p) => p.stack > 0);
   const complete = live.length === 1 && tournament.pendingHandId === null;
   const hero = tournament.players.find((p) => p.isHero)!;
@@ -16,11 +41,34 @@ export function TournamentPanel({ tournament, seats }: { tournament: TournamentS
   const completedAtLevel = tournament.completedHands - tournament.levelIndex * HANDS_PER_LEVEL;
   const levelCapped = tournament.levelIndex === BLIND_LEVELS.length - 1;
   return (
-    <details className="tournament-panel" onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.open = false; }}>
+    <details
+      ref={detailsRef}
+      className="tournament-panel"
+      onToggle={(e) => setIsOpen(e.currentTarget.open)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') e.currentTarget.open = false;
+      }}
+    >
       <summary>
-        <span className="panel-kicker">SNG</span>
-        {complete ? 'Tournament complete' : `${live.length} left`} · Level {tournament.levelIndex + 1} · {formatChips(level.smallBlind)}/{formatChips(level.bigBlind)} · BBA {formatChips(level.bigBlindAnte)}
-        {' · '}{levelCapped ? 'final level' : `${Math.min(completedAtLevel, HANDS_PER_LEVEL)}/${HANDS_PER_LEVEL} hands`} · Prizes {PAYOUT_SHARES.map(percent).join(' / ')}
+        <span className="summary-track">
+          <span className="panel-kicker">SNG</span>
+          <span className={`hud-pill${complete ? ' hud-pill--brass' : ' hud-pill--mint'}`}>
+            {complete ? 'Tournament complete' : `${live.length} left`}
+          </span>
+          <span className="hud-sep" aria-hidden="true">·</span>
+          <span className="hud-item">Level {tournament.levelIndex + 1}</span>
+          <span className="hud-sep" aria-hidden="true">·</span>
+          <span className="hud-item hud-item--em">{formatChips(level.smallBlind)}/{formatChips(level.bigBlind)}</span>
+          <span className="hud-sep" aria-hidden="true">·</span>
+          <span className="hud-item">BBA {formatChips(level.bigBlindAnte)}</span>
+          <span className="hud-sep" aria-hidden="true">·</span>
+          <span className="hud-item">{levelCapped ? 'final level' : `${Math.min(completedAtLevel, HANDS_PER_LEVEL)}/${HANDS_PER_LEVEL} hands`}</span>
+          <span className="hud-sep" aria-hidden="true">·</span>
+          <span className="hud-item hud-item--prizes">Prizes {PAYOUT_SHARES.map(percent).join(' / ')}</span>
+        </span>
+        <span className="summary-chevron" aria-hidden="true">
+          <ChevronDownIcon />
+        </span>
       </summary>
       <div className="tournament-body">
         <h2>{complete ? 'Tournament complete' : `${live.length} players remaining`}</h2>
@@ -44,7 +92,7 @@ export function TournamentPanel({ tournament, seats }: { tournament: TournamentS
               const stack = seats.find((seat) => seat.id === player.id)?.stack ?? player.stack;
               return <tr key={player.id} className={player.isHero ? 'standings-hero' : ''}>
                 <td>{player.place === null ? '—' : `${tied ? 'T' : ''}${player.place}`}</td>
-                <td>{player.name}{player.isHero ? ' · you' : ''}</td>
+                <td>{player.name}{player.isHero && player.name.toLowerCase() !== 'you' ? ' · you' : ''}</td>
                 <td>{player.place === null ? `${formatChips(stack)} · ${(stack / level.bigBlind).toFixed(1)} BB` : percent(player.payoutShare)}</td>
               </tr>;
             })}

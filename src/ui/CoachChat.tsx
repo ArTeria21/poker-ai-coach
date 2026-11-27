@@ -3,6 +3,7 @@ import { DIAGNOSIS_PREFIX } from '../agent/contract';
 import { useChat } from '@ai-sdk/react';
 import type { Mode } from '../agent/training';
 import { useSettingsStore } from '../store/settingsStore';
+import { MicIcon } from './Icons';
 import { Segmented } from './Segmented';
 import {
   chat, dispatch, isQuestion, loadMemoryStatus, lockedGate, openQuestion, retry, sendUserText, setTrainingMode, startDiagnosis, stopDan, stopDiagnosis,
@@ -72,7 +73,7 @@ const isTool = (part: Part): part is ToolPart => part.type.startsWith('tool-');
 const isDiagnosisStart = (message: DanMessage) =>
   message.role === 'user' && message.parts.some((p) => p.type === 'text' && p.text.startsWith(DIAGNOSIS_PREFIX));
 
-export function CoachChat() {
+export function CoachChat({ className = '' }: { className?: string } = {}) {
   const { messages, status, error } = useChat<DanMessage>({ chat });
   const mode = useSettingsStore((s) => s.mode);
   // The latest request's gate, while still locked; after an error or Stop nobody else can release it, so the player may go on without Dan.
@@ -124,14 +125,23 @@ export function CoachChat() {
     focusInput();
   };
 
+  const micLabel = voice.state === 'recording'
+    ? `Recording ${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`
+    : voice.state === 'permission' ? 'Allow microphone…'
+      : voice.state === 'transcribing' ? 'Transcribing…'
+        : 'Voice';
+
   return (
-    <aside className="coach-chat" aria-label="Chat with coach Dan">
+    <aside className={`coach-chat${className ? ` ${className}` : ''}`} aria-label="Chat with coach Dan">
       <div className="chat-header">
-        <span className="panel-kicker">Coach</span><h2>Dan</h2>
+        <div className="chat-title-group">
+          <span className="panel-kicker">Coach</span>
+          <h2>Dan</h2>
+        </div>
         <div className="chat-header-actions">
           {diagnosis
-            ? <button className="chat-header-btn" onClick={stopDiagnosis}>Stop diagnosis</button>
-            : <button className="chat-header-btn" disabled={busy} onClick={startDiagnosis}>Diagnose level</button>}
+            ? <button type="button" className="chat-header-btn chat-header-btn--active" onClick={stopDiagnosis}>Stop diagnosis</button>
+            : <button type="button" className="chat-header-btn" disabled={busy} onClick={startDiagnosis}>Diagnose level</button>}
           {/* Training pauses during the diagnosis and resumes afterwards. */}
           <Segmented label="Mode" value={mode} options={['free', 'training'] as Mode[]} onChange={setTrainingMode} disabled={diagnosis} />
         </div>
@@ -147,10 +157,10 @@ export function CoachChat() {
             {initialized === false && (
               <>
                 <p className="chat-text">Я пока ничего о тебе не знаю. Начнём с короткой диагностики уровня — так я пойму, с чего начать.</p>
-                <button className="chat-example chat-example--primary" onClick={startDiagnosis}>Пройти диагностику</button>
+                <button type="button" className="chat-example chat-example--primary" onClick={startDiagnosis}>Пройти диагностику</button>
               </>
             )}
-            {EXAMPLES.map((example) => <button key={example} className="chat-example" onClick={() => send(example)}>{example}</button>)}
+            {EXAMPLES.map((example) => <button key={example} type="button" className="chat-example" onClick={() => send(example)}>{example}</button>)}
           </div>
         )}
         {messages.map((message) => message.metadata?.trigger ? (
@@ -182,19 +192,20 @@ export function CoachChat() {
         {(status === 'error' && error) || stuckGate ? (
           <div className="chat-error" role="alert">
             <span>{status === 'error' && error ? errorText(error) : 'Stopped: the table is still locked.'}</span>
-            <button onClick={() => { retry(); focusInput(); }}>Retry</button>
-            {stuckGate && <button onClick={() => dispatch({ type: 'released', gateId: stuckGate })}>Continue without Dan</button>}
+            <button type="button" onClick={() => { retry(); focusInput(); }}>Retry</button>
+            {stuckGate && <button type="button" onClick={() => dispatch({ type: 'released', gateId: stuckGate })}>Continue without Dan</button>}
           </div>
         ) : null}
       </div>
       <form className="chat-form" onSubmit={(e) => { e.preventDefault(); send(input); }}>
         <textarea
-          ref={inputRef} rows={3} value={input} aria-label="Message to Dan" placeholder="Ask Dan about this spot (Enter sends, Shift+Enter for a new line)"
+          ref={inputRef} rows={open ? 2 : 3} value={input} aria-label="Message to Dan" placeholder="Ask Dan about this spot (Enter sends, Shift+Enter for a new line)"
           onChange={(e) => { setInput(e.target.value); voice.clearError(); }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); send(input); }
           }}
         />
+        {open !== null && <div className="chat-skip-hint">Sending a message skips the active card</div>}
         {voice.error && <div className="chat-voice-error" role="alert">{voice.error}</div>}
         <div className="chat-buttons">
           <button
@@ -204,9 +215,9 @@ export function CoachChat() {
             aria-pressed={voice.state === 'recording'}
             title={voice.supported ? 'Hold to talk, or click to start and click again to stop · Esc cancels' : 'Voice input needs microphone access (HTTPS or localhost)'}
           >
-            {voice.state === 'recording' ? `Recording ${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`
-              : voice.state === 'permission' ? 'Allow microphone…' : voice.state === 'transcribing' ? 'Transcribing…' : 'Voice'}
+            <MicIcon />{micLabel}
           </button>
+          {voice.supported && <span className="chat-mic-hint">Hold or click · Esc cancels</span>}
           {busy && <button type="button" className="chat-stop" onClick={() => { stopDan(); focusInput(); }}>Stop</button>}
           <button type="submit" className="chat-send" disabled={busy || !input.trim()}>Send</button>
         </div>
