@@ -1,5 +1,5 @@
 import { randInt, shuffleInPlace, type Rng } from '../random';
-import { PERSONALITIES, type Personality } from './personalities';
+import { PERSONALITIES, type Personality } from '../decision/personalities';
 
 export const BOT_COUNT = 5;
 

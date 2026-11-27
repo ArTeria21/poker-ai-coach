@@ -1,9 +1,9 @@
 import type { Card } from '../cards/deck';
 import type { Rng } from '../random';
-import type { Personality } from '../bots/personalities';
-import { postflopStrength } from '../bots/handStrength';
+import type { Personality } from '../decision/personalities';
+import { postflopStrength } from '../decision/handStrength';
 import { analyzeHand } from '../cards/handEval';
-import { handLabel, handTier } from '../bots/preflopTiers';
+import { handLabel, handTier } from '../decision/preflopTiers';
 
 /**
  * After a bot wins without showdown: does it flip over the bluff, and what

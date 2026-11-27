@@ -6,8 +6,8 @@ import { freshDeck, type Card } from '../cards/deck';
 import { mulberry32 } from '../random';
 import { decideAction } from './botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { PERSONALITIES, type Difficulty } from './personalities';
-import { handTier } from './preflopTiers';
+import { PERSONALITIES, type Difficulty } from '../decision/personalities';
+import { handTier } from '../decision/preflopTiers';
 
 const personalityIds = Object.keys(PERSONALITIES);
 

@@ -4,7 +4,7 @@ import { applyAction, startHand } from '../engine/gameStateMachine';
 import { mulberry32, type Rng } from '../random';
 import { decideAction } from './botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { PERSONALITIES, type Personality } from './personalities';
+import { PERSONALITIES, type Personality } from '../decision/personalities';
 import { jitterPersonality } from './lineup';
 
 /**

@@ -1,11 +1,11 @@
 import type { PlayerAction } from '../engine/types';
 import type { DecisionView } from '../engine/decisionView';
 import type { Rng } from '../random';
-import { handTier, handLabel } from './preflopTiers';
-import { postflopStrength } from './handStrength';
-import { decisionFacts, decisionEquity } from '../equity/decisionEquity';
+import { handTier, handLabel } from '../decision/preflopTiers';
+import { postflopStrength } from '../decision/handStrength';
+import { decisionFacts, decisionEquity } from '../decision/decisionEquity';
 import { RangeSamplingError } from '../equity/monteCarlo';
-import { DIFFICULTY_NOISE, type Difficulty, type Personality } from './personalities';
+import { DIFFICULTY_NOISE, type Difficulty, type Personality } from '../decision/personalities';
 
 export interface BotDecision {
   action: PlayerAction;

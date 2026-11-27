@@ -3,10 +3,10 @@ import type { Card } from '../cards/deck';
 import { replayHand, type HandRecord, type ReplayStep } from '../engine/replay';
 import { hashSeed } from '../random';
 import { buildDecisionView, type DecisionView } from '../engine/decisionView';
-import { handTier, handLabel } from '../bots/preflopTiers';
-import { PERSONALITIES } from '../bots/personalities';
-import { postflopStrength } from '../bots/handStrength';
-import { decisionEquity, decisionFacts } from '../equity/decisionEquity';
+import { handTier, handLabel } from '../decision/preflopTiers';
+import { PERSONALITIES } from '../decision/personalities';
+import { postflopStrength } from '../decision/handStrength';
+import { decisionEquity, decisionFacts } from '../decision/decisionEquity';
 import { RangeSamplingError } from '../equity/monteCarlo';
 import { drawCompletionOuts, spr } from '../math/pokerMath';
 

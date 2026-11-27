@@ -5,7 +5,7 @@ import { startHand, startHandWithDeck, applyAction } from '../engine/gameStateMa
 import { freshDeck, type Card } from '../cards/deck';
 import { decideAction } from '../bots/botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { PERSONALITIES } from '../bots/personalities';
+import { PERSONALITIES } from '../decision/personalities';
 import { mulberry32 } from '../random';
 import { gradeDecision, gradeHand, gradeHandFromSteps } from './gradeHand';
 

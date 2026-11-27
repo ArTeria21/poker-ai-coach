@@ -1,9 +1,9 @@
 import type { DecisionView } from '../engine/decisionView';
-import { modelOpponentRanges } from '../bots/opponentRanges';
+import { modelOpponentRanges } from './opponentRanges';
 import { buildPots } from '../engine/potManager';
 import { chipAmount } from '../math/pokerMath';
 import { icmEquities, icmOutcomeEV } from '../math/icm';
-import { monteCarloEquity } from './monteCarlo';
+import { monteCarloEquity } from '../equity/monteCarlo';
 
 /** Public capped-call projection; no opponent action or future street is invented. */
 export function decisionFacts(view: DecisionView) {

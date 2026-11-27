@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '../cards/deck';
 import { bluffRevealCheck } from './bluffReveal';
-import { PERSONALITIES } from '../bots/personalities';
+import { PERSONALITIES } from '../decision/personalities';
 
 const always: () => number = () => 0; // rng that always passes the chance roll
 const never: () => number = () => 0.999;

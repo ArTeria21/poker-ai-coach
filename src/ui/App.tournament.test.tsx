@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MockLanguageModelV4 } from 'ai/test';
 import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
-import { handTier } from '../bots/preflopTiers';
+import { handTier } from '../decision/preflopTiers';
 
 // A whole tournament takes seconds, more under a loaded machine.
 vi.setConfig({ testTimeout: 30_000 });

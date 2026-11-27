@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32, type Rng } from '../random';
 import { AVATARS, BOT_COUNT, BOT_NAMES, JITTER, generateLineup, jitterPersonality } from './lineup';
-import { PERSONALITIES, type Personality } from './personalities';
+import { PERSONALITIES, type Personality } from '../decision/personalities';
 
 const ARCHETYPES = Object.keys(PERSONALITIES);
 const LOW: Rng = () => 0;

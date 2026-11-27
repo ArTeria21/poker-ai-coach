@@ -1,14 +1,14 @@
 import { expect, it, vi } from 'vitest';
-import { decisionEquity } from '../equity/decisionEquity';
+import { decisionEquity } from '../decision/decisionEquity';
 import { RangeSamplingError } from '../equity/monteCarlo';
 import { startHand, applyAction } from '../engine/gameStateMachine';
 import { decideAction } from './botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { PERSONALITIES } from './personalities';
+import { PERSONALITIES } from '../decision/personalities';
 import { mulberry32 } from '../random';
 
-vi.mock('../equity/decisionEquity', async importOriginal => ({
-  ...await importOriginal<typeof import('../equity/decisionEquity')>(), decisionEquity: vi.fn(),
+vi.mock('../decision/decisionEquity', async importOriginal => ({
+  ...await importOriginal<typeof import('../decision/decisionEquity')>(), decisionEquity: vi.fn(),
 }));
 
 it('falls back explicitly on sampling exhaustion, and propagates validation/programmer errors', () => {

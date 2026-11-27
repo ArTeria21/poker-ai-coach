@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react
 import { useGameStore } from '../store/gameStore';
 import { useSettingsStore, type GameSpeed } from '../store/settingsStore';
 import { tableController } from '../game/tableController';
-import type { Difficulty } from '../bots/personalities';
+import type { Difficulty } from '../decision/personalities';
 import { PokerTable } from './table/PokerTable';
 import { ActionBar } from './table/ActionBar';
 import { TournamentPanel } from './TournamentPanel';

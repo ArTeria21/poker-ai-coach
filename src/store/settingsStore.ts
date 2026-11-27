@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Difficulty } from '../bots/personalities';
+import type { Difficulty } from '../decision/personalities';
 import type { Mode } from '../agent/training';
 
 export type GameSpeed = 'slow' | 'normal' | 'fast';

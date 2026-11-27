@@ -4,7 +4,7 @@ import type { HandEvent } from '../engine/events';
 import { applyAction, startHand } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
 import { mulberry32, randomSeed, type Rng } from '../random';
-import type { Personality } from '../bots/personalities';
+import type { Personality } from '../decision/personalities';
 import { generateLineup, type Avatar } from '../bots/lineup';
 import { decideAction } from '../bots/botDecision';
 import { buildDecisionView } from '../engine/decisionView';

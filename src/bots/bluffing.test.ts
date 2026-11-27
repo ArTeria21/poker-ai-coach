@@ -4,8 +4,8 @@ import { applyAction, startHand } from '../engine/gameStateMachine';
 import { mulberry32 } from '../random';
 import { decideAction } from './botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { postflopStrength } from './handStrength';
-import { PERSONALITIES } from './personalities';
+import { postflopStrength } from '../decision/handStrength';
+import { PERSONALITIES } from '../decision/personalities';
 
 /**
  * Bluffing playtest: auto-play many hands and count postflop aggressive

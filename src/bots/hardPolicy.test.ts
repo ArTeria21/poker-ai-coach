@@ -4,10 +4,10 @@ import { freshDeck } from '../cards/deck';
 import type { PlayerAction } from '../engine/types';
 import { decideAction } from './botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { PERSONALITIES } from './personalities';
+import { PERSONALITIES } from '../decision/personalities';
 import { mulberry32 } from '../random';
-import { modelOpponentRanges } from './opponentRanges';
-import { handTier } from './preflopTiers';
+import { modelOpponentRanges } from '../decision/opponentRanges';
+import { handTier } from '../decision/preflopTiers';
 
 const config={smallBlind:5,bigBlind:10,buttonIndex:0,seats:[0,1,2].map(i=>({id:`p${i}`,name:`P${i}`,stack:1000,isHero:i===0}))};
 it('hard faced-price decisions actually depend on modeled public ranges',()=>{

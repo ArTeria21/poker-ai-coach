@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { archetypePosterior, modelOpponentRanges } from './opponentRanges';
-import { jitterPersonality } from './lineup';
+import { jitterPersonality } from '../bots/lineup';
 import { freshDeck, type Card } from '../cards/deck';
 import { evaluate7 } from '../cards/handEval';
-import { decideAction } from './botDecision';
+import { decideAction } from '../bots/botDecision';
 import { buildDecisionView } from '../engine/decisionView';
 import { PERSONALITIES, type Personality } from './personalities';
 import { mulberry32, type Rng } from '../random';

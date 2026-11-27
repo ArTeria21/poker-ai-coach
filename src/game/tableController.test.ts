@@ -7,9 +7,9 @@ import { gradeHandFromSteps } from '../analysis/gradeHand';
 import { applyAction } from '../engine/gameStateMachine';
 import { decideAction } from '../bots/botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { modelOpponentRanges } from '../bots/opponentRanges';
-import { decisionEquity } from '../equity/decisionEquity';
-import { PERSONALITIES, type Personality } from '../bots/personalities';
+import { modelOpponentRanges } from '../decision/opponentRanges';
+import { decisionEquity } from '../decision/decisionEquity';
+import { PERSONALITIES, type Personality } from '../decision/personalities';
 import type { GameState } from '../engine/types';
 import { coachSnapshot } from '../agent/snapshot';
 
