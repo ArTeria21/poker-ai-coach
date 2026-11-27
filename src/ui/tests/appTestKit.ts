@@ -7,14 +7,14 @@ vi.hoisted(() => Object.defineProperty(globalThis, 'localStorage', { value: new 
 /** Whether the preflop filter calls the hero's spot obvious. */
 // Read lazily by the mock factory, which runs when App first imports the training module.
 export const filter = { obvious: false };
-vi.mock('../agent/training', async (original) => ({
-  ...await original<typeof import('../agent/training')>(),
+vi.mock('../../agent/training', async (original) => ({
+  ...await original<typeof import('../../agent/training')>(),
   obviousPreflopSpot: () => filter.obvious,
 }));
-vi.mock('../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('../../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 // Bots check or call, so hands run to the hero's decisions deterministically.
-vi.mock('../bots/botDecision', async (original) => ({
-  ...await original<typeof import('../bots/botDecision')>(),
+vi.mock('../../bots/botDecision', async (original) => ({
+  ...await original<typeof import('../../bots/botDecision')>(),
   decideAction: vi.fn((view) => ({ action: { type: view.legal.check ? 'check' : 'call' }, trace: [] })),
 }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

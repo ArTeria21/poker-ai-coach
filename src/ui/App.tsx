@@ -5,12 +5,12 @@ import { tableController } from '../app/tableController';
 import type { Difficulty } from '../decision/personalities';
 import { PokerTable } from './table/PokerTable';
 import { ActionBar } from './table/ActionBar';
-import { TournamentPanel } from './TournamentPanel';
-import { CoachChat } from './CoachChat';
-import { LandingPage } from './LandingPage';
-import { MemoryDrawer } from './MemoryDrawer';
-import { Segmented } from './Segmented';
-import { BrandSpadeIcon, ChipsBBIcon, CoachIcon, DeckColorIcon, SoundOffIcon, SoundOnIcon, TableIcon } from './Icons';
+import { TournamentPanel } from './table/TournamentPanel';
+import { CoachChat } from './coach/CoachChat';
+import { LandingPage } from './landing/LandingPage';
+import { MemoryDrawer } from './memory/MemoryDrawer';
+import { Segmented } from './shared/Segmented';
+import { BrandSpadeIcon, ChipsBBIcon, CoachIcon, DeckColorIcon, SoundOffIcon, SoundOnIcon, TableIcon } from './shared/Icons';
 import { connectTraining, loadMemoryStatus, lockedGate, startDiagnosis, useDiagnosisStore, useTrainingStore } from '../app/coachSession';
 import './App.css';
 

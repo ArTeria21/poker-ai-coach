@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type } from './appTestKit';
+import { type } from '../tests/appTestKit';
 import { CoachChat } from './CoachChat';
 import { insertAtCaret, MAX_SECONDS } from './voiceInput';
 

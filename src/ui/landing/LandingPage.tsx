@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import { ArrowRightIcon, BrandSpadeIcon, DiagnosticsIcon, FeltOverlaySvg, MemoryIcon, TableIcon } from './Icons';
+import { ArrowRightIcon, BrandSpadeIcon, DiagnosticsIcon, FeltOverlaySvg, MemoryIcon, TableIcon } from '../shared/Icons';
 import './LandingPage.css';
 
 interface LandingPageProps {

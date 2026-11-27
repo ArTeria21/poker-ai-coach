@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { errorText, toolChip, type ToolPart } from './CoachChat';
-import { chatRequestBody } from '../app/coachSession';
-import { gameStore } from '../app/gameStore';
+import { chatRequestBody } from '../../app/coachSession';
+import { gameStore } from '../../app/gameStore';
 
 const part = (p: object) => ({ toolCallId: 't1', ...p }) as ToolPart;
 

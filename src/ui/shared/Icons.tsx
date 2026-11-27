@@ -1,5 +1,5 @@
 import type { ReactNode, SVGProps } from 'react';
-import { AVATARS, type Avatar } from '../bots/lineup';
+import { AVATARS, type Avatar } from '../../bots/lineup';
 
 const baseProps: SVGProps<SVGSVGElement> = {
   fill: 'none',

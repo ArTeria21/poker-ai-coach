@@ -1,14 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { DIAGNOSIS_PREFIX } from '../agent/contract';
+import { DIAGNOSIS_PREFIX } from '../../agent/contract';
 import { useChat } from '@ai-sdk/react';
-import type { Mode } from '../agent/training';
-import { useSettingsStore } from '../app/settingsStore';
-import { MemoryIcon, MicIcon } from './Icons';
-import { Segmented } from './Segmented';
+import type { Mode } from '../../agent/training';
+import { useSettingsStore } from '../../app/settingsStore';
+import { MemoryIcon, MicIcon } from '../shared/Icons';
+import { Segmented } from '../shared/Segmented';
 import {
   chat, dispatch, isQuestion, lockedGate, openQuestion, retry, sendUserText, setTrainingMode, startDiagnosis, stopDan, stopDiagnosis,
   useDiagnosisStore, useTrainingStore, type DanMessage, type TriggerMeta,
-} from '../app/coachSession';
+} from '../../app/coachSession';
 import { AnsweredQuestion, AssessmentCard, QuestionForm, Skipped } from './DiagnosisCards';
 import { insertAtCaret, useVoiceInput } from './voiceInput';
 import './CoachChat.css';

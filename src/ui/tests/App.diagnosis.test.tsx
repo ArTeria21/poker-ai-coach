@@ -3,11 +3,11 @@ import { dom, mockApi, tick, type, until, type Stream } from './appTestKit';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from './App';
-import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from '../app/coachSession';
-import { decisionGateId } from '../agent/training';
-import { gameStore } from '../app/gameStore';
-import { useSettingsStore } from '../app/settingsStore';
+import { App } from '../App';
+import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from '../../app/coachSession';
+import { decisionGateId } from '../../agent/training';
+import { gameStore } from '../../app/gameStore';
+import { useSettingsStore } from '../../app/settingsStore';
 
 const store = () => gameStore.getState();
 const PROBE = {

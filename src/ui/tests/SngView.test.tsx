@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createTournament } from '../game/tournament';
-import { gameStore } from '../app/gameStore';
-import type { GameViewState, SeatView } from '../app/tableView';
-import { TournamentPanel } from './TournamentPanel';
-import { PokerTable } from './table/PokerTable';
-import { ActionBar } from './table/ActionBar';
+import { createTournament } from '../../game/tournament';
+import { gameStore } from '../../app/gameStore';
+import type { GameViewState, SeatView } from '../../app/tableView';
+import { TournamentPanel } from '../table/TournamentPanel';
+import { PokerTable } from '../table/PokerTable';
+import { ActionBar } from '../table/ActionBar';
 
 // SSR normally uses Zustand's initial state; read each fixture's current state.
-vi.mock('../app/gameStore', async (original) => {
-  const actual = await original<typeof import('../app/gameStore')>();
+vi.mock('../../app/gameStore', async (original) => {
+  const actual = await original<typeof import('../../app/gameStore')>();
   return { ...actual, useGameView: <T,>(select: (view: GameViewState) => T) => select(actual.gameStore.getState()) };
 });
 

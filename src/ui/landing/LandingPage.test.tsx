@@ -1,15 +1,15 @@
 // @vitest-environment happy-dom
-import { streamed, tick, until, type Stream } from './appTestKit';
+import { streamed, tick, until, type Stream } from '../tests/appTestKit';
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import type { MemoryOverview } from '../../server/memory';
-import { TOPICS, TOPIC_IDS } from '../agent/contract';
-import { tableController } from '../app/tableController';
-import { gameStore } from '../app/gameStore';
-import { useSettingsStore } from '../app/settingsStore';
-import { App } from './App';
-import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from '../app/coachSession';
+import type { MemoryOverview } from '../../../server/memory';
+import { TOPICS, TOPIC_IDS } from '../../agent/contract';
+import { tableController } from '../../app/tableController';
+import { gameStore } from '../../app/gameStore';
+import { useSettingsStore } from '../../app/settingsStore';
+import { App } from '../App';
+import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from '../../app/coachSession';
 
 const empty: MemoryOverview = { initialized: false, workingState: null, knowledgeMap: null, highlights: { total: 0, entries: [] } };
 const populated: MemoryOverview = {

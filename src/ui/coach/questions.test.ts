@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnosisTools } from '../../server/tools';
+import { diagnosisTools } from '../../../server/tools';
 import { askRecord, correctIndices, displayOptions, emptySelection, probeRecord, toggleDontKnow, toggleOption, toggleOther } from './questions';
 
 const OPTIONS = [{ label: 'Колл', value: 'call' }, { label: 'Фолд', value: 'fold' }, { label: 'Рейз' }];

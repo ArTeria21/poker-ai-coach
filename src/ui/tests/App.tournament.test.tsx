@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MockLanguageModelV4 } from 'ai/test';
 import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
-import { handTier } from '../decision/preflopTiers';
+import { handTier } from '../../decision/preflopTiers';
 
 // A whole tournament takes seconds, more under a loaded machine.
 vi.setConfig({ testTimeout: 30_000 });
@@ -18,11 +18,11 @@ vi.setConfig({ testTimeout: 30_000 });
 vi.hoisted(() => Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true }));
 const fake = vi.hoisted(() => ({ model: null as unknown, seed: 0 }));
 vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: () => () => fake.model }));
-vi.mock('../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('../../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 // Deterministic deals and bot noise: counter seeds instead of crypto ones, and a fixed button.
-vi.mock('../random', async (original) => ({ ...await original<typeof import('../random')>(), randomSeed: () => Math.imul(++fake.seed, 2654435761) >>> 0 }));
-vi.mock('../game/tournament', async (original) => {
-  const real = await original<typeof import('../game/tournament')>();
+vi.mock('../../random', async (original) => ({ ...await original<typeof import('../../random')>(), randomSeed: () => Math.imul(++fake.seed, 2654435761) >>> 0 }));
+vi.mock('../../game/tournament', async (original) => {
+  const real = await original<typeof import('../../game/tournament')>();
   return { ...real, createTournament: (lineup: Parameters<typeof real.createTournament>[0], _button: number, id: string) => real.createTournament(lineup, 0, id) };
 });
 
@@ -31,7 +31,7 @@ vi.mock('../game/tournament', async (original) => {
 /** Imports the client and the server as a page load and a server start do; after vi.resetModules() it is a restart. */
 async function boot() {
   const [{ App }, session, { gameStore }, { useSettingsStore }, { app }] = await Promise.all([
-    import('./App'), import('../app/coachSession'), import('../app/gameStore'), import('../app/settingsStore'), import('../../server/app'),
+    import('../App'), import('../../app/coachSession'), import('../../app/gameStore'), import('../../app/settingsStore'), import('../../../server/app'),
   ]);
   return { App, session, gameStore, useSettingsStore, server: app };
 }

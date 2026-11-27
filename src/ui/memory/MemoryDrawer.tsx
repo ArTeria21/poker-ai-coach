@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { MemoryOverview } from '../../server/memory';
-import { CloseIcon, DiagnosticsIcon, MemoryIcon } from './Icons';
-import { useDiagnosisStore } from '../app/coachSession';
+import type { MemoryOverview } from '../../../server/memory';
+import { CloseIcon, DiagnosticsIcon, MemoryIcon } from '../shared/Icons';
+import { useDiagnosisStore } from '../../app/coachSession';
 import './MemoryDrawer.css';
 
 interface MemoryDrawerProps {

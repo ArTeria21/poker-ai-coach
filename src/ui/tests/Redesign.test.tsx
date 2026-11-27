@@ -4,20 +4,20 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true }));
-vi.mock('../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('../../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 
-import { createTournament } from '../game/tournament';
-import { tableController } from '../app/tableController';
-import { gameStore } from '../app/gameStore';
-import type { SeatView } from '../app/tableView';
-import type { Avatar } from '../bots/lineup';
-import { useSettingsStore } from '../app/settingsStore';
-import { App } from './App';
-import { AnsweredQuestion } from './DiagnosisCards';
-import { TournamentPanel } from './TournamentPanel';
-import { ActionBar } from './table/ActionBar';
-import { CardView } from './table/CardView';
-import { PokerTable } from './table/PokerTable';
+import { createTournament } from '../../game/tournament';
+import { tableController } from '../../app/tableController';
+import { gameStore } from '../../app/gameStore';
+import type { SeatView } from '../../app/tableView';
+import type { Avatar } from '../../bots/lineup';
+import { useSettingsStore } from '../../app/settingsStore';
+import { App } from '../App';
+import { AnsweredQuestion } from '../coach/DiagnosisCards';
+import { TournamentPanel } from '../table/TournamentPanel';
+import { ActionBar } from '../table/ActionBar';
+import { CardView } from '../table/CardView';
+import { PokerTable } from '../table/PokerTable';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

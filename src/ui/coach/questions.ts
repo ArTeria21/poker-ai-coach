@@ -1,5 +1,5 @@
-import { CONFIDENCE_STOPS } from '../agent/contract';
-import { hashSeed, mulberry32, shuffleInPlace } from '../random';
+import { CONFIDENCE_STOPS } from '../../agent/contract';
+import { hashSeed, mulberry32, shuffleInPlace } from '../../random';
 
 /**
  * The diagnosis question cards' pure logic, ported from learnharness `question-core.ts`: display order and letters,

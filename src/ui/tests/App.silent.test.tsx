@@ -4,14 +4,14 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // Node's own experimental localStorage global (undefined without a file) shadows happy-dom's; the settings store persists to it.
 vi.hoisted(() => Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true }));
-import { App } from './App';
-import { tableController } from '../app/tableController';
-import { gameStore } from '../app/gameStore';
-import { useSettingsStore } from '../app/settingsStore';
+import { App } from '../App';
+import { tableController } from '../../app/tableController';
+import { gameStore } from '../../app/gameStore';
+import { useSettingsStore } from '../../app/settingsStore';
 
-vi.mock('../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
-vi.mock('../bots/botDecision', async (original) => ({
-  ...await original<typeof import('../bots/botDecision')>(),
+vi.mock('../../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('../../bots/botDecision', async (original) => ({
+  ...await original<typeof import('../../bots/botDecision')>(),
   decideAction: vi.fn((view) => ({ action: { type: view.legal.check ? 'check' : 'call' }, trace: [] })),
 }));
 
