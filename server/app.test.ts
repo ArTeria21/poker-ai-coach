@@ -162,6 +162,7 @@ describe('POST /api/chat', () => {
       const free = await toolNames({ messages: [userMessage], snapshot, mode: 'free', gate: null });
       expect(free.names).not.toContain('release_actions');
       expect(free.system).toContain('Режим: свободная игра');
+      expect(free.system).toContain('Подход к обучению и тон:');
       expect(free.system).toContain('120–200 слов');
       const ungated = await toolNames({ messages: [userMessage], snapshot, mode: 'training', gate: null });
       expect(ungated.names).not.toContain('release_actions');
@@ -396,7 +397,7 @@ describe('level diagnosis', () => {
     const system = JSON.stringify(call.prompt[0].content);
     expect(system).toContain('Режим: диагностика уровня');
     expect(system).toContain('Память об ученике пуста');
-    expect(system).not.toContain('Сократический стиль:');
+    expect(system).not.toContain('Подход к обучению и тон:');
     expect(system).not.toContain('120–200 слов');
     expect(system).not.toContain('write_working_state');
     expect((await post({ messages: [start], snapshot, mode: 'training', gate: { id: 'sng-test-hand-1#0', kind: 'decision' }, phase: 'diagnosis' })).status).toBe(400);
