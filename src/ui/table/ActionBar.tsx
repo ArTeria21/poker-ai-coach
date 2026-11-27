@@ -1,10 +1,10 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { useGameStore } from '../../store/gameStore';
-import { tableController } from '../../game/tableController';
+import { useGameView } from '../../app/gameStore';
+import { tableController } from '../../app/tableController';
 import { formatChips } from '../../game/format';
 import type { PlayerAction } from '../../engine/types';
-import { dispatch, useTableLock } from '../coachSession';
-import { useSettingsStore } from '../../store/settingsStore';
+import { dispatch, useTableLock } from '../../app/coachSession';
+import { useSettingsStore } from '../../app/settingsStore';
 import './ActionBar.css';
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -15,13 +15,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 export function ActionBar() {
-  const heroLegal = useGameStore((s) => s.heroLegal);
-  const pot = useGameStore((s) => s.pot);
-  const currentBet = useGameStore((s) => s.currentBet);
-  const bigBlind = useGameStore((s) => s.bigBlind);
-  const phase = useGameStore((s) => s.phase);
-  const status = useGameStore((s) => s.status);
-  const awaitingNext = useGameStore((s) => s.awaitingNext);
+  const heroLegal = useGameView((s) => s.heroLegal);
+  const pot = useGameView((s) => s.pot);
+  const currentBet = useGameView((s) => s.currentBet);
+  const bigBlind = useGameView((s) => s.bigBlind);
+  const phase = useGameView((s) => s.phase);
+  const status = useGameView((s) => s.status);
+  const awaitingNext = useGameView((s) => s.awaitingNext);
   const toCall = heroLegal?.call?.amount ?? 0;
   const raise = heroLegal?.raise;
   const lock = useTableLock();

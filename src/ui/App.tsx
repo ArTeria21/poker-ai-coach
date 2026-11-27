@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
-import { useGameStore } from '../store/gameStore';
-import { useSettingsStore, type GameSpeed } from '../store/settingsStore';
-import { tableController } from '../game/tableController';
+import { useGameView } from '../app/gameStore';
+import { useSettingsStore, type GameSpeed } from '../app/settingsStore';
+import { tableController } from '../app/tableController';
 import type { Difficulty } from '../decision/personalities';
 import { PokerTable } from './table/PokerTable';
 import { ActionBar } from './table/ActionBar';
@@ -11,7 +11,7 @@ import { LandingPage } from './LandingPage';
 import { MemoryDrawer } from './MemoryDrawer';
 import { Segmented } from './Segmented';
 import { BrandSpadeIcon, ChipsBBIcon, CoachIcon, DeckColorIcon, SoundOffIcon, SoundOnIcon, TableIcon } from './Icons';
-import { connectTraining, loadMemoryStatus, lockedGate, startDiagnosis, useDiagnosisStore, useTrainingStore } from './coachSession';
+import { connectTraining, loadMemoryStatus, lockedGate, startDiagnosis, useDiagnosisStore, useTrainingStore } from '../app/coachSession';
 import './App.css';
 
 export type AppView = 'landing' | 'table';
@@ -25,11 +25,11 @@ export function App({ initialView = 'landing' }: AppProps) {
   const sessionStarted = useRef(false);
   const memoryStatusLoaded = useRef(false);
   const memoryTrigger = useRef<HTMLButtonElement | null>(null);
-  const handNumber = useGameStore((s) => s.handNumber);
+  const handNumber = useGameView((s) => s.handNumber);
   const initialized = useDiagnosisStore((s) => s.initialized);
-  const tournament = useGameStore((s) => s.tournament);
-  const seats = useGameStore((s) => s.seats);
-  const tableAttention = useGameStore((s) => s.heroLegal !== null || s.awaitingNext);
+  const tournament = useGameView((s) => s.tournament);
+  const seats = useGameView((s) => s.seats);
+  const tableAttention = useGameView((s) => s.heroLegal !== null || s.awaitingNext);
   const coachAttention = useTrainingStore((s) => lockedGate(s.state) !== null);
   const diagnosisActive = useDiagnosisStore((s) => s.resume !== null);
   const [mobilePane, setMobilePane] = useState<'table' | 'coach'>('table');
@@ -128,8 +128,8 @@ export function App({ initialView = 'landing' }: AppProps) {
 }
 
 function Header({ onBackToLanding }: { onBackToLanding: () => void }) {
-  const handNumber = useGameStore((s) => s.handNumber);
-  const status = useGameStore((s) => s.status);
+  const handNumber = useGameView((s) => s.handNumber);
+  const status = useGameView((s) => s.status);
   const difficulty = useSettingsStore((s) => s.difficulty);
   const speed = useSettingsStore((s) => s.speed);
   const soundEnabled = useSettingsStore((s) => s.soundEnabled);
@@ -228,7 +228,7 @@ function logLineClass(line: string): string {
 }
 
 function HandLog() {
-  const log = useGameStore((s) => s.log);
+  const log = useGameView((s) => s.log);
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const body = bodyRef.current;

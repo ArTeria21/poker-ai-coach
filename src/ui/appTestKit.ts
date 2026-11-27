@@ -11,7 +11,7 @@ vi.mock('../agent/training', async (original) => ({
   ...await original<typeof import('../agent/training')>(),
   obviousPreflopSpot: () => filter.obvious,
 }));
-vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 // Bots check or call, so hands run to the hero's decisions deterministically.
 vi.mock('../bots/botDecision', async (original) => ({
   ...await original<typeof import('../bots/botDecision')>(),

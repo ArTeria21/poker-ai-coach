@@ -1,22 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { coachSnapshotSchema } from './contract';
-import { coachSnapshot } from './snapshot';
-import { TableController } from '../game/tableController';
+import { coachSnapshotSchema } from '../agent/contract';
+import { coachSnapshot } from './coachSnapshot';
+import { TableController } from './tableController';
 import { beginTournamentHand, createTournament } from '../game/tournament';
 import { applyAction, startHand } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
 import { mulberry32 } from '../random';
 import type { GameState } from '../engine/types';
-import { useGameStore, type GameViewState } from '../store/gameStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { gameStore } from './gameStore';
+import type { GameViewState } from './tableView';
+import { useSettingsStore } from './settingsStore';
 
-vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('./sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 vi.mock('../random', async (original) => {
   let n = 0;
   return { ...await original<typeof import('../random')>(), randomSeed: () => (++n * 2654435761) >>> 0 };
 });
 
-const store = () => useGameStore.getState();
+const store = () => gameStore.getState();
 const lineup = [
   { id: 'hero', name: 'You', isHero: true },
   ...['Ivan', 'Lena', 'Mateo', 'Priya', 'Hugo'].map((name, i) => ({ id: `bot-${i + 1}`, name, isHero: false })),
@@ -44,7 +45,7 @@ describe('coach snapshot', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0); // button seat; bots and hero use seeded rngs
     const controller = new TableController();
     let checked = 0, showdowns = 0, foldWins = 0, bluffShows = 0;
-    const unsubscribe = useGameStore.subscribe((view: GameViewState, prev: GameViewState) => {
+    const unsubscribe = gameStore.subscribe((view: GameViewState, prev: GameViewState) => {
       if (view.seats === prev.seats) return; // log only; the snapshot ignores it
       const { state: st, reveals } = controller as unknown as { state: GameState; reveals: Map<number, string> };
       const snapshot = coachSnapshot(view)!;

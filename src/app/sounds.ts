@@ -1,4 +1,4 @@
-import { useSettingsStore } from '../store/settingsStore';
+import { useSettingsStore } from './settingsStore';
 
 /**
  * All sounds are synthesized with WebAudio — no audio assets to load.

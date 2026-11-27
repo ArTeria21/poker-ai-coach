@@ -1,6 +1,6 @@
 import type { Card } from '../../cards/deck';
 import { isRedSuit, rankLabel, suitSymbol } from '../../game/format';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore } from '../../app/settingsStore';
 
 interface CardViewProps {
   /** Undefined renders a face-down card back. */

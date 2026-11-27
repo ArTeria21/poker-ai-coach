@@ -4,12 +4,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from './coachSession';
+import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from '../app/coachSession';
 import { decisionGateId } from '../agent/training';
-import { useGameStore } from '../store/gameStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { gameStore } from '../app/gameStore';
+import { useSettingsStore } from '../app/settingsStore';
 
-const store = () => useGameStore.getState();
+const store = () => gameStore.getState();
 const PROBE = {
   question: 'Какое решение лучше?',
   context: 'Ривер, банк 300, соперник ставит 30. У тебя около 30% эквити.',

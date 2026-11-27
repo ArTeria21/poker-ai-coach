@@ -1,19 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { coachSnapshotSchema, type CoachSnapshot } from './contract';
-import { coachSnapshot } from './snapshot';
-import { TableController } from '../game/tableController';
+import { coachSnapshot } from '../app/coachSnapshot';
+import { TableController } from '../app/tableController';
 import { beginTournamentHand, createTournament } from '../game/tournament';
 import { applyAction, startHandWithDeck } from '../engine/gameStateMachine';
 import { legalActions } from '../engine/bettingRules';
 import { freshDeck } from '../cards/deck';
 import type { PlayerAction } from '../engine/types';
-import { useGameStore, type GameViewState } from '../store/gameStore';
+import { gameStore } from '../app/gameStore';
+import type { GameViewState } from '../app/tableView';
 import {
   decisionGateId, initialTrainingState, obviousPreflopSpot, reviewGateId, step,
   type TrainingEvent, type TrainingState,
 } from './training';
 
-vi.mock('../game/sounds', () => ({ sounds: {} }));
+vi.mock('../app/sounds', () => ({ sounds: {} }));
 
 const H = 'sng-x-hand-3';
 const k = (i: number) => decisionGateId(H, i);
@@ -401,7 +402,7 @@ describe('preflop obvious-spot filter', () => {
       const legal = legalActions(state)!;
       expect(legal.seatIndex).toBe(0);
       controller.publishSnapshot({ heroLegal: legal });
-      const snapshot = coachSnapshotSchema.parse(coachSnapshot(useGameStore.getState()));
+      const snapshot = coachSnapshotSchema.parse(coachSnapshot(gameStore.getState()));
       expect(snapshot.hero.cards).toEqual(cards);
       return snapshot;
     }

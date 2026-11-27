@@ -8,12 +8,13 @@ import type { Personality } from '../decision/personalities';
 import { generateLineup, type Avatar } from '../bots/lineup';
 import { decideAction } from '../bots/botDecision';
 import { buildDecisionView } from '../engine/decisionView';
-import { bluffRevealCheck } from './bluffReveal';
-import { beginTournamentHand, createTournament, settleTournamentHand, type TournamentState } from './tournament';
+import { bluffRevealCheck } from '../game/bluffReveal';
+import { beginTournamentHand, createTournament, settleTournamentHand, type TournamentState } from '../game/tournament';
 import { sounds } from './sounds';
-import { useGameStore, type GameViewState, type SeatView } from '../store/gameStore';
-import { SPEED_FACTOR, useSettingsStore } from '../store/settingsStore';
-import { formatCards } from './format';
+import { gameStore } from './gameStore';
+import type { GameViewState, SeatView } from './tableView';
+import { SPEED_FACTOR, useSettingsStore } from './settingsStore';
+import { formatCards } from '../game/format';
 
 /** Runs the pure hand/tournament engines and publishes public table snapshots. */
 export class TableController {
@@ -50,7 +51,7 @@ export class TableController {
     this.state = null;
     this.handNumber = 0;
     this.botRng = mulberry32(randomSeed());
-    useGameStore.getState().reset();
+    gameStore.getState().reset();
     void this.runLoop(this.sessionToken);
   }
 
@@ -175,7 +176,7 @@ export class TableController {
     if (!reveal) return false;
     const desc = reveal.description;
     this.reveals.set(seat, reveal.semiBluff ? `${desc} with a draw — a semi-bluff` : `${desc} — a stone-cold bluff`);
-    useGameStore
+    gameStore
       .getState()
       .appendLog([reveal.semiBluff
         ? `${player.name} shows the semi-bluff: ${formatCards(ps.holeCards)} — ${desc} with a live draw!`
@@ -256,7 +257,7 @@ export class TableController {
           break;
       }
     }
-    if (lines.length > 0) useGameStore.getState().appendLog(lines);
+    if (lines.length > 0) gameStore.getState().appendLog(lines);
   }
 
   private publishSnapshot(overrides?: Partial<GameViewState>): void {
@@ -300,7 +301,7 @@ export class TableController {
       toStreetBet: a.toStreetBet, potBefore: a.potBefore, toCallBefore: a.toCallBefore, stackBefore: a.stackBefore,
     }));
     const complete = tournament.players.filter((p) => p.stack > 0).length === 1 && tournament.pendingHandId === null;
-    useGameStore.getState().publish({
+    gameStore.getState().publish({
       tournament,
       latestDecisionGrade: this.latestDecisionGrade,
       handId: st.handId,

@@ -5,11 +5,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { MemoryOverview } from '../../server/memory';
 import { TOPICS, TOPIC_IDS } from '../agent/contract';
-import { tableController } from '../game/tableController';
-import { useGameStore } from '../store/gameStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { tableController } from '../app/tableController';
+import { gameStore } from '../app/gameStore';
+import { useSettingsStore } from '../app/settingsStore';
 import { App } from './App';
-import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from './coachSession';
+import { chat, setTrainingMode, stopDiagnosis, useDiagnosisStore } from '../app/coachSession';
 
 const empty: MemoryOverview = { initialized: false, workingState: null, knowledgeMap: null, highlights: { total: 0, entries: [] } };
 const populated: MemoryOverview = {
@@ -44,7 +44,7 @@ const closeButton = () => container.querySelector<HTMLButtonElement>('[aria-labe
 
 beforeEach(() => {
   vi.useFakeTimers();
-  useGameStore.getState().reset();
+  gameStore.getState().reset();
   useDiagnosisStore.setState({ initialized: null, resume: null });
   useSettingsStore.setState({ speed: 'fast', soundEnabled: false });
   setTrainingMode('free');
@@ -84,7 +84,7 @@ describe('landing navigation', () => {
     expect(container.querySelector('h1')?.textContent).toBe('Play the table.Sharpen your edge.');
     expect(container.querySelectorAll('.landing-card')).toHaveLength(3);
     expect(container.querySelectorAll('.landing-flow li')).toHaveLength(3);
-    expect(useGameStore.getState().handNumber).toBe(0);
+    expect(gameStore.getState().handNumber).toBe(0);
     expect(start).not.toHaveBeenCalled();
     expect(statusCalls()).toHaveLength(1);
     expect(memoryCalls()).toHaveLength(0);
@@ -109,8 +109,8 @@ describe('landing navigation', () => {
     const start = vi.spyOn(tableController, 'startSession');
     await mount();
     await click('Enter Tournament');
-    await until(() => useGameStore.getState().heroLegal !== null);
-    const { handId, tournament } = useGameStore.getState();
+    await until(() => gameStore.getState().heroLegal !== null);
+    const { handId, tournament } = gameStore.getState();
     expect(start).toHaveBeenCalledTimes(1);
     expect(container.querySelector('.play-column')?.classList.contains('mobile-pane--hidden')).toBe(false);
     await click('Poker AI-Coach');
@@ -118,8 +118,8 @@ describe('landing navigation', () => {
     expect(button('Resume · Hand #1')).toBeDefined();
     expect(container.querySelector('.landing-card')?.textContent).toContain('Resume Hand #1');
     await click('Resume Tournament');
-    expect(useGameStore.getState().handId).toBe(handId);
-    expect(useGameStore.getState().tournament).toBe(tournament);
+    expect(gameStore.getState().handId).toBe(handId);
+    expect(gameStore.getState().tournament).toBe(tournament);
     expect(start).toHaveBeenCalledTimes(1);
     expect(statusCalls()).toHaveLength(1);
   });
@@ -164,13 +164,13 @@ describe('memory drawer', () => {
     expect(memoryCalls()).toHaveLength(0);
     await click('View Agent Memory');
     expect(drawer().textContent).toContain("Loading Coach Dan's memory…");
-    expect(useGameStore.getState().handNumber).toBe(0);
+    expect(gameStore.getState().handNumber).toBe(0);
     await act(async () => resolve(Response.json(empty)));
     expect(drawer().textContent).toContain("Dan doesn't know your game yet.");
     expect(memoryCalls()).toHaveLength(1);
     await click('Enter Tournament', drawer());
     expect(drawer()).toBeNull();
-    expect(useGameStore.getState().handNumber).toBe(1);
+    expect(gameStore.getState().handNumber).toBe(1);
   });
 
   it('starts diagnostics from the empty drawer and closes it', async () => {
@@ -279,7 +279,7 @@ describe('memory drawer', () => {
     await act(async () => closeButton().click());
     overview = () => Response.json(populated);
     await click('Enter Tournament');
-    await until(() => useGameStore.getState().heroLegal !== null);
+    await until(() => gameStore.getState().heroLegal !== null);
     await click('Memory');
     expect(container.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(drawer().textContent).toContain('- Тема: защита BB');

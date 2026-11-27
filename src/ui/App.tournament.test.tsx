@@ -18,7 +18,7 @@ vi.setConfig({ testTimeout: 30_000 });
 vi.hoisted(() => Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true }));
 const fake = vi.hoisted(() => ({ model: null as unknown, seed: 0 }));
 vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: () => () => fake.model }));
-vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 // Deterministic deals and bot noise: counter seeds instead of crypto ones, and a fixed button.
 vi.mock('../random', async (original) => ({ ...await original<typeof import('../random')>(), randomSeed: () => Math.imul(++fake.seed, 2654435761) >>> 0 }));
 vi.mock('../game/tournament', async (original) => {
@@ -30,10 +30,10 @@ vi.mock('../game/tournament', async (original) => {
 
 /** Imports the client and the server as a page load and a server start do; after vi.resetModules() it is a restart. */
 async function boot() {
-  const [{ App }, session, { useGameStore }, { useSettingsStore }, { app }] = await Promise.all([
-    import('./App'), import('./coachSession'), import('../store/gameStore'), import('../store/settingsStore'), import('../../server/app'),
+  const [{ App }, session, { gameStore }, { useSettingsStore }, { app }] = await Promise.all([
+    import('./App'), import('../app/coachSession'), import('../app/gameStore'), import('../app/settingsStore'), import('../../server/app'),
   ]);
-  return { App, session, useGameStore, useSettingsStore, server: app };
+  return { App, session, gameStore, useSettingsStore, server: app };
 }
 
 // --- fake Dan ------------------------------------------------------------------------------------------
@@ -121,7 +121,7 @@ let lockedGates: string[];
 let decisions: { key: string; playersLeft: number; preflop: boolean; check: boolean }[];
 let unsubscribe: () => void;
 
-const store = () => m.useGameStore.getState();
+const store = () => m.gameStore.getState();
 const training = () => m.session.useTrainingStore.getState();
 const locked = () => m.session.lockedGate(training().state);
 const button = (label: string) => [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(label));
@@ -158,7 +158,7 @@ async function mount(mode: 'free' | 'training', seed: number) {
     const gate = m.session.lockedGate(state);
     if (gate && lockedGates.at(-1) !== gate.id) lockedGates.push(gate.id);
   });
-  const offGame = m.useGameStore.subscribe((view, prev) => {
+  const offGame = m.gameStore.subscribe((view, prev) => {
     if (!view.heroLegal || view.heroLegal === prev.heroLegal) return;
     decisions.push({
       key: `${view.handId}#${view.handActions.length}`,

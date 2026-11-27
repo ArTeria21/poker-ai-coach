@@ -3,14 +3,14 @@ import { DefaultChatTransport, type InferUITools, type UIDataTypes, type UIMessa
 import { create } from 'zustand';
 import type { DanTools } from '../../server/tools';
 import { DIAGNOSIS_PREFIX, FOLD_AT, MAX_UNFOLDED_MESSAGES, WINDOW_MESSAGES } from '../agent/contract';
-import { coachSnapshot } from '../agent/snapshot';
+import { coachSnapshot } from './coachSnapshot';
 import {
   decisionGateId, initialTrainingState, obviousPreflopSpot, reviewGateId, step, TRIGGER_PREFIX,
   type GateKind, type Mode, type RequestGate, type TrainingEvent, type TrainingRequest, type TrainingState,
 } from '../agent/training';
 import type { GamePhase } from '../engine/types';
-import { useGameStore } from '../store/gameStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { gameStore, useGameView } from './gameStore';
+import { useSettingsStore } from './settingsStore';
 
 /**
  * The one coach chat of the app and the Training Mode wiring around it:
@@ -100,7 +100,7 @@ export function chatRequestBody(messages: DanMessage[]) {
   return {
     messages: messages.slice(start).slice(-MAX_UNFOLDED_MESSAGES),
     summary,
-    snapshot: coachSnapshot(useGameStore.getState()),
+    snapshot: coachSnapshot(gameStore.getState()),
     mode: state.mode,
     phase: useDiagnosisStore.getState().resume ? 'diagnosis' as const : null,
     // Any send while a gate is locked (trigger, the player's answer, Retry) may release that gate.
@@ -180,7 +180,7 @@ function flush(): void {
   const request = pending;
   pending = null;
   if (lockedGate(useTrainingStore.getState().state)?.id !== request.gateId) return;
-  const street = useGameStore.getState().phase ?? 'preflop';
+  const street = gameStore.getState().phase ?? 'preflop';
   const text = request.kind === 'decision'
     ? `${TRIGGER_PREFIX} Мой ход: ${STREET_RU[street]}.`
     : `${TRIGGER_PREFIX} Раздача завершена, жду разбор раздачи.`;
@@ -221,14 +221,14 @@ export async function loadMemoryStatus(): Promise<void> {
 /** A message the player typed (or an example question). */
 export function sendUserText(text: string): void {
   // Not once the hand is over on screen: during the showdown pause the machine has not seen the end yet, and chat must not reopen the hand for review.
-  if (useGameStore.getState().phase !== 'complete') dispatch({ type: 'userMessage' });
+  if (gameStore.getState().phase !== 'complete') dispatch({ type: 'userMessage' });
   // The player typed instead of answering: Dan sees which questions were skipped (port of learnharness' dismissed record).
   for (let id = openQuestion(chat.messages); id !== null; id = openQuestion(chat.messages)) settleOpenQuestion(id, { dismissed: true });
   void chat.sendMessage({ parts: [{ type: 'text', text }] });
 }
 
 export function setTrainingMode(mode: Mode): void {
-  const view = useGameStore.getState();
+  const view = gameStore.getState();
   // The decision or finished hand on screen counts as handled: training starts at the next trigger.
   const currentKey = !view.handId ? undefined
     : view.heroLegal ? decisionGateId(view.handId, view.handActions.length)
@@ -258,7 +258,7 @@ function releaseFromMessages(): void {
 
 /** Feeds table and chat events into the state machine (and ends the diagnosis once diagnosis_done succeeds) and folds the chat when it settles; returns the unsubscribe. */
 export function connectTraining(): () => void {
-  const offGame = useGameStore.subscribe((view, prev) => {
+  const offGame = gameStore.subscribe((view, prev) => {
     if (view.handId === null) {
       if (prev.handId !== null) dispatch({ type: 'reset' });
       return;
@@ -287,8 +287,8 @@ export function connectTraining(): () => void {
 /** Which control the locked gate holds right now: only the decision or finished hand on screen counts. */
 export function useTableLock(): { decision: boolean; review: boolean } {
   const locked = useTrainingStore((s) => lockedGate(s.state)?.id ?? null);
-  const decisionKey = useGameStore((s) => s.handId && s.heroLegal ? decisionGateId(s.handId, s.handActions.length) : null);
-  const handId = useGameStore((s) => s.handId);
+  const decisionKey = useGameView((s) => s.handId && s.heroLegal ? decisionGateId(s.handId, s.handActions.length) : null);
+  const handId = useGameView((s) => s.handId);
   return {
     decision: locked !== null && locked === decisionKey,
     review: locked !== null && handId !== null && locked === reviewGateId(handId),

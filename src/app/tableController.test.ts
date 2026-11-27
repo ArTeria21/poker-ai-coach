@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TableController } from './tableController';
-import { useGameStore } from '../store/gameStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { gameStore } from './gameStore';
+import { useSettingsStore } from './settingsStore';
 import * as decisionViewModule from '../engine/decisionView';
 import { gradeHandFromSteps } from '../analysis/gradeHand';
 import { applyAction } from '../engine/gameStateMachine';
@@ -11,7 +11,7 @@ import { modelOpponentRanges } from '../decision/opponentRanges';
 import { decisionEquity } from '../decision/decisionEquity';
 import { PERSONALITIES, type Personality } from '../decision/personalities';
 import type { GameState } from '../engine/types';
-import { coachSnapshot } from '../agent/snapshot';
+import { coachSnapshot } from './coachSnapshot';
 
 vi.mock('./sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 vi.mock('../random', async (original) => ({ ...await original<typeof import('../random')>(), randomSeed: () => 42 }));
@@ -23,7 +23,7 @@ vi.mock('../bots/botDecision', async (original) => ({
 }));
 
 let controller: TableController;
-const store = () => useGameStore.getState();
+const store = () => gameStore.getState();
 
 async function advanceUntil(predicate: () => boolean, limit = 1000): Promise<void> {
   for (let i = 0; i < limit && !predicate(); i++) await vi.advanceTimersByTimeAsync(500);
@@ -45,7 +45,7 @@ beforeEach(() => {
   vi.spyOn(Math, 'random').mockReturnValue(0);
   vi.mocked(decideAction).mockImplementation((view) => ({ action: { type: view.legal.check ? 'check' : 'call' }, trace: [] }));
   useSettingsStore.setState({ speed: 'fast', soundEnabled: false });
-  useGameStore.getState().reset();
+  gameStore.getState().reset();
   controller = new TableController();
 });
 
@@ -129,6 +129,27 @@ describe('SNG table controller', () => {
     expect(store().tournament?.levelIndex).toBe(1);
   });
 
+  it('consumes at most one next-hand continuation per wait and ignores a command with none pending', async () => {
+    controller.continueNextHand();
+    controller.startSession();
+    controller.continueNextHand();
+    await finishHand();
+    expect(store().handNumber).toBe(1);
+    controller.continueNextHand();
+    controller.continueNextHand();
+    await Promise.resolve();
+    expect(store().handNumber).toBe(2);
+    expect(store().awaitingNext).toBe(false);
+    await finishHand();
+    expect(store().handNumber).toBe(2);
+    expect(store().awaitingNext).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(store().handNumber).toBe(2);
+    controller.continueNextHand();
+    await Promise.resolve();
+    expect(store().handNumber).toBe(3);
+  });
+
   it('lets an eliminated hero spectate, preserves bot identities after compaction, and finishes without a rebuy', async () => {
     const identities: [Personality, string | undefined][] = [];
     vi.mocked(decideAction).mockImplementation((view, personality) => {
@@ -188,7 +209,7 @@ describe('SNG table controller', () => {
     const collect = (kind: keyof typeof allowed, objects: (object | null | undefined)[]) => {
       for (const o of objects) if (o) published[kind].add(Object.keys(o).sort().join());
     };
-    const unsubscribe = useGameStore.subscribe((view) => {
+    const unsubscribe = gameStore.subscribe((view) => {
       collect('store', [view]);
       collect('seat', view.seats);
       collect('lastAction', view.seats.map((seat) => seat.lastAction));
@@ -219,7 +240,7 @@ describe('SNG table controller', () => {
   it('grades and models opponents identically whatever hidden personalities the bots have', async () => {
     const run = async (archetype: string) => {
       vi.setSystemTime(new Date('2026-11-26T12:00:00Z'));
-      useGameStore.getState().reset();
+      gameStore.getState().reset();
       const used = new Set<string>();
       vi.mocked(decideAction).mockImplementation((view, personality) => {
         used.add(personality.id);

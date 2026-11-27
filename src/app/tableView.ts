@@ -1,5 +1,4 @@
 import type { DecisionGrade } from '../analysis/gradeHand';
-import { create } from 'zustand';
 import type { ActionType, GamePhase, LegalActions, Position, PublicAction } from '../engine/types';
 import type { Card } from '../cards/deck';
 import type { TournamentState } from '../game/tournament';
@@ -8,7 +7,8 @@ import type { Avatar } from '../bots/lineup';
 /**
  * UI-facing snapshot of the table. SANITIZED: bot hole cards are null until
  * a public reveal — components physically cannot leak what they don't
- * receive. Only the table controller writes to this store.
+ * receive. Plain records: no Zustand or DOM types, so they can be mapped
+ * (coachSnapshot) and rendered without access to the writable store.
  */
 export interface SeatView {
   seatIndex: number;
@@ -76,38 +76,3 @@ export interface GameViewState {
   /** Rolling human-readable action log (most recent last). */
   log: string[];
 }
-
-const initialState: GameViewState = {
-  tournament: null,
-  status: 'idle',
-  handId: null,
-  handNumber: 0,
-  phase: null,
-  seats: [],
-  board: [],
-  pot: 0,
-  bigBlind: 20,
-  currentBet: 0,
-  forcedBets: [],
-  handActions: [],
-  heroLegal: null,
-  latestDecisionGrade: null,
-  awaitingNext: false,
-  banner: null,
-  log: [],
-};
-
-interface GameStore extends GameViewState {
-  /** Controller-only: replace the snapshot. */
-  publish: (partial: Partial<GameViewState>) => void;
-  appendLog: (lines: string[]) => void;
-  reset: () => void;
-}
-
-export const useGameStore = create<GameStore>()((set) => ({
-  ...initialState,
-  publish: (partial) => set(partial),
-  appendLog: (lines) =>
-    set((s) => ({ log: [...s.log, ...lines].slice(-200) })),
-  reset: () => set(initialState),
-}));

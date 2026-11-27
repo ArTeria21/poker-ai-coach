@@ -4,13 +4,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true }));
-vi.mock('../game/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
+vi.mock('../app/sounds', () => ({ sounds: { deal: vi.fn(), chips: vi.fn(), check: vi.fn(), fold: vi.fn(), allIn: vi.fn(), win: vi.fn(), yourTurn: vi.fn() } }));
 
 import { createTournament } from '../game/tournament';
-import { tableController } from '../game/tableController';
-import { useGameStore, type SeatView } from '../store/gameStore';
+import { tableController } from '../app/tableController';
+import { gameStore } from '../app/gameStore';
+import type { SeatView } from '../app/tableView';
 import type { Avatar } from '../bots/lineup';
-import { useSettingsStore } from '../store/settingsStore';
+import { useSettingsStore } from '../app/settingsStore';
 import { App } from './App';
 import { AnsweredQuestion } from './DiagnosisCards';
 import { TournamentPanel } from './TournamentPanel';
@@ -59,7 +60,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  useGameStore.getState().reset();
+  gameStore.getState().reset();
   useSettingsStore.setState({
     difficulty: 'medium',
     speed: 'fast',
@@ -85,7 +86,7 @@ describe('Botanical Casino Glasshouse UI & fixes', () => {
     seats[0].isButton = false;
     seats[3].lastAction = { type: 'raise', amount: 120 };
     seats[0].wonAmount = 2450;
-    useGameStore.getState().publish({
+    gameStore.getState().publish({
       seats,
       board: ['Ah', 'Kh', 'Qh', 'Jh', '2c'],
       pot: 2450,
@@ -112,7 +113,7 @@ describe('Botanical Casino Glasshouse UI & fixes', () => {
     const { seats } = makeFixture();
     seats[1].lastAction = { type: 'bet', amount: 60 };
     seats[0].wonAmount = 200;
-    useGameStore.getState().publish({
+    gameStore.getState().publish({
       seats,
       pot: 120,
       bigBlind: 20,
@@ -210,7 +211,7 @@ describe('Botanical Casino Glasshouse UI & fixes', () => {
 
   it('shows preflop vs postflop presets, syncs number input, and supports safe keyboard shortcuts', () => {
     const actSpy = vi.spyOn(tableController, 'humanAct').mockImplementation(() => {});
-    useGameStore.getState().publish({
+    gameStore.getState().publish({
       phase: 'preflop',
       pot: 30,
       currentBet: 20,
@@ -240,7 +241,7 @@ describe('Botanical Casino Glasshouse UI & fixes', () => {
 
     // Postflop presets
     act(() => {
-      useGameStore.getState().publish({ phase: 'flop', currentBet: 0, pot: 120 });
+      gameStore.getState().publish({ phase: 'flop', currentBet: 0, pot: 120 });
     });
     const postflopPresets = [...container.querySelectorAll('.raise-presets .preset')].map((b) => b.textContent);
     expect(postflopPresets).toEqual(['Min', '½ Pot', '¾ Pot', 'Pot', 'All-in']);
@@ -262,7 +263,7 @@ describe('Botanical Casino Glasshouse UI & fixes', () => {
 
     // Mid-tournament (handNumber > 1, playing): first click enters Confirm?, second click resets
     act(() => {
-      useGameStore.getState().publish({ handNumber: 4, status: 'playing' });
+      gameStore.getState().publish({ handNumber: 4, status: 'playing' });
     });
     const newBtn = container.querySelector<HTMLButtonElement>('.new-tournament')!;
     expect(newBtn.textContent).toBe('New SNG');

@@ -4,12 +4,12 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { chat, setTrainingMode, useTrainingStore } from './coachSession';
+import { chat, setTrainingMode, useTrainingStore } from '../app/coachSession';
 import { decisionGateId, reviewGateId } from '../agent/training';
-import { useGameStore } from '../store/gameStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { gameStore } from '../app/gameStore';
+import { useSettingsStore } from '../app/settingsStore';
 
-const store = () => useGameStore.getState();
+const store = () => gameStore.getState();
 
 let container: HTMLDivElement;
 let root: Root;

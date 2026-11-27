@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CONFIDENCE_STOPS, TOPICS } from '../agent/contract';
-import { answerQuestion, type DanMessage } from './coachSession';
+import { answerQuestion, type DanMessage } from '../app/coachSession';
 import {
   askRecord, canSubmitAsk, canSubmitProbe, correctIndices, DEFAULT_CONFIDENCE_INDEX, displayOptions, emptySelection, letterAt,
   probeRecord, toggleDontKnow, toggleOption, toggleOther, type DisplayOption, type OptionOrder,

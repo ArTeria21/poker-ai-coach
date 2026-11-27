@@ -1,5 +1,6 @@
-import { useGameStore, type SeatView } from '../../store/gameStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useGameView } from '../../app/gameStore';
+import type { SeatView } from '../../app/tableView';
+import { useSettingsStore } from '../../app/settingsStore';
 import { formatChips } from '../../game/format';
 import { FeltOverlaySvg, SeatAvatarIcon } from '../Icons';
 import { CardView } from './CardView';
@@ -8,12 +9,12 @@ import './PokerTable.css';
 const formatBB = (chips: number, bigBlind: number) => `${(chips / Math.max(1, bigBlind)).toFixed(1)} BB`;
 
 export function PokerTable() {
-  const seats = useGameStore((s) => s.seats);
-  const board = useGameStore((s) => s.board);
-  const pot = useGameStore((s) => s.pot);
-  const bigBlind = useGameStore((s) => s.bigBlind);
-  const phase = useGameStore((s) => s.phase);
-  const banner = useGameStore((s) => s.banner);
+  const seats = useGameView((s) => s.seats);
+  const board = useGameView((s) => s.board);
+  const pot = useGameView((s) => s.pot);
+  const bigBlind = useGameView((s) => s.bigBlind);
+  const phase = useGameView((s) => s.phase);
+  const banner = useGameView((s) => s.banner);
   const displayBB = useSettingsStore((s) => s.displayBB);
 
   const heroIndex = seats.find((s) => s.isHero)?.seatIndex ?? 0;

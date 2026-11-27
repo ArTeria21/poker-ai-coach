@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createTournament } from '../game/tournament';
-import { useGameStore, type SeatView } from '../store/gameStore';
+import { gameStore } from '../app/gameStore';
+import type { GameViewState, SeatView } from '../app/tableView';
 import { TournamentPanel } from './TournamentPanel';
 import { PokerTable } from './table/PokerTable';
 import { ActionBar } from './table/ActionBar';
 
 // SSR normally uses Zustand's initial state; read each fixture's current state.
-vi.mock('../store/gameStore', async (original) => {
-  const actual = await original<typeof import('../store/gameStore')>();
-  return { ...actual, useGameStore: Object.assign((select: (state: ReturnType<typeof actual.useGameStore.getState>) => unknown) => select(actual.useGameStore.getState()), actual.useGameStore) };
+vi.mock('../app/gameStore', async (original) => {
+  const actual = await original<typeof import('../app/gameStore')>();
+  return { ...actual, useGameView: <T,>(select: (view: GameViewState) => T) => select(actual.gameStore.getState()) };
 });
 
 function fixture() {
@@ -22,7 +23,7 @@ function fixture() {
   return { tournament, seats };
 }
 
-beforeEach(() => useGameStore.getState().reset());
+beforeEach(() => gameStore.getState().reset());
 
 describe('SNG interface', () => {
   it('uses live stacks while retaining all-in players in the remaining count', () => {
@@ -40,7 +41,7 @@ describe('SNG interface', () => {
     const { seats } = fixture();
     seats[0].isButton = false;
     seats[4] = { ...seats[4], eliminated: true, stack: 0, isButton: true };
-    useGameStore.getState().publish({ seats });
+    gameStore.getState().publish({ seats });
     const html = renderToStaticMarkup(<PokerTable />);
     expect(html.match(/data-seat=/g)).toHaveLength(6);
     expect(html).toContain('seat--pos4 seat--eliminated');
@@ -61,7 +62,7 @@ describe('SNG interface', () => {
     const { seats } = fixture();
     seats[1].streetBet = 5;
     seats[2].streetBet = 7;
-    useGameStore.getState().publish({
+    gameStore.getState().publish({
       seats, currentBet: 10, status: 'playing',
       heroLegal: { seatIndex: 0, fold: true, check: false, call: { amount: 10, allIn: false }, raise: { minTo: 20, maxTo: 101 } },
     });
@@ -73,7 +74,7 @@ describe('SNG interface', () => {
   });
 
   it('does not offer another hand after the tournament ends', () => {
-    useGameStore.getState().publish({ status: 'tournamentComplete', awaitingNext: false });
+    gameStore.getState().publish({ status: 'tournamentComplete', awaitingNext: false });
     const html = renderToStaticMarkup(<ActionBar />);
     expect(html).toContain('Tournament complete');
     expect(html).not.toContain('Deal next hand');

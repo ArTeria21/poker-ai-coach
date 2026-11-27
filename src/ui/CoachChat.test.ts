@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { errorText, toolChip, type ToolPart } from './CoachChat';
-import { chatRequestBody } from './coachSession';
-import { useGameStore } from '../store/gameStore';
+import { chatRequestBody } from '../app/coachSession';
+import { gameStore } from '../app/gameStore';
 
 const part = (p: object) => ({ toolCallId: 't1', ...p }) as ToolPart;
 
-beforeEach(() => useGameStore.getState().reset());
+beforeEach(() => gameStore.getState().reset());
 
 describe('coach chat', () => {
   it('labels running, failed and finished tool calls with their key result', () => {

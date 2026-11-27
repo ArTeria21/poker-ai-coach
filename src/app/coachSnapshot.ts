@@ -1,5 +1,5 @@
-import type { CoachSnapshot } from './contract';
-import type { GameViewState } from '../store/gameStore';
+import type { CoachSnapshot } from '../agent/contract';
+import type { GameViewState } from './tableView';
 import { BLIND_LEVELS, HANDS_PER_LEVEL, PAYOUT_SHARES } from '../game/tournament';
 import { effectiveStack, spr } from '../math/pokerMath';
 
